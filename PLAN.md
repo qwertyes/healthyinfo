@@ -3,7 +3,14 @@
 > 이 파일은 진행상황 추적용입니다. 작업을 끝낼 때마다 `[ ]`를 `[x]`로 바꾸고, 맨 위 **진행률**을 갱신하세요.
 > 새 세션(다음날 등)에서 작업을 이어갈 때는 이 파일을 먼저 읽고 미완료(`[ ]`) 항목부터 이어서 진행하면 됩니다.
 
-**진행률: 2 / 26 (8%)**
+**진행률: 7 / 26 (27%)**
+
+## 사용자 확인이 필요해서 멈춘 항목
+- **채널명**: "뉴트리로그(NutriLog)"를 제안했지만 아직 확정 승인 안 됨
+- **도메인 구매**: 결제가 필요해 임의 진행 안 함
+- **Supabase 계정 생성**: 새 이메일로 가입 필요 (사용자 본인만 가능)
+- **Vercel 계정/프로젝트 생성**: 로그인 필요 (사용자 본인만 가능)
+→ 이 4개가 준비되면 알려주세요. Supabase 프로젝트 URL/키, Vercel 로그인만 있으면 나머지는 이어서 진행 가능합니다.
 
 ## 참고 문서 (배경/근거)
 - 사업성 검토 (유사 사례, 수익구조, 리스크): https://claude.ai/code/artifact/d45dc067-0a79-4466-8c06-66a1c33549e3
@@ -27,13 +34,13 @@
 - [ ] Vercel 프로젝트 생성 및 GitHub 연동 (Hobby로 시작)
 
 ## Phase 1 · 웹 MVP
-- [ ] Next.js(App Router) 프로젝트 스캐폴딩
-- [ ] Supabase 연동 (DB 스키마: 사용자, 온보딩 응답, 식단 결과)
-- [ ] 홈 즉시체험 위젯 (나이/성별/활동량 입력 → 즉시 식단 미리보기)
-- [ ] 온보딩 퍼스널라이제이션 퀴즈 (6문항) 구현
-- [ ] AI 맞춤 식단 생성 로직 (Vercel AI Gateway 연동)
-- [ ] 결과 리포트 화면 + 프리미엄 CTA
-- [ ] 개인정보처리방침/약관 페이지 (건강 민감정보 동의 포함)
+- [x] Next.js(App Router) 프로젝트 스캐폴딩 → `web/` (Next.js 16 + Tailwind + shadcn/ui)
+- [ ] Supabase 연동 (DB 스키마: 사용자, 온보딩 응답, 식단 결과) — Supabase 프로젝트 생성 대기
+- [x] 홈 즉시체험 위젯 (나이/성별/활동량 입력 → 즉시 식단 미리보기) → `web/src/components/instant-widget.tsx`, BMR/TDEE 계산은 `web/src/lib/nutrition.ts`
+- [x] 온보딩 퍼스널라이제이션 퀴즈 (6문항) 구현 → `web/src/components/onboarding/onboarding-quiz.tsx` (답변은 현재 클라이언트 상태에만 저장 — Supabase 연동 후 DB 저장으로 교체 필요)
+- [ ] AI 맞춤 식단 생성 로직 (Vercel AI Gateway 연동) — Vercel 프로젝트 생성 대기
+- [x] 결과 리포트 화면 + 프리미엄 CTA → 온보딩 완료 시 리포트 화면 표시, 프리미엄 버튼은 결제 연동 전까지 비활성 상태
+- [x] 개인정보처리방침/약관 페이지 (건강 민감정보 동의 포함) → `web/src/app/privacy`, `web/src/app/terms` (초안, 법률 자문 전 공개 금지)
 
 ## Phase 2 · 영상 파이프라인 이식
 - [ ] my-video-creator에서 `make_tts.py`, `youtube_api.py` 복제·정리
