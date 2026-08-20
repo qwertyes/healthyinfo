@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { DisclaimerNote } from "@/components/disclaimer-note";
+import { supabase } from "@/lib/supabase/client";
 import {
   ACTIVITY_LABEL,
   GOAL_LABEL,
@@ -36,6 +37,8 @@ export function OnboardingQuiz() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<QuizAnswers>(DEFAULT_ANSWERS);
   const [done, setDone] = useState(false);
+  const [email, setEmail] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   function update<K extends keyof QuizAnswers>(key: K, value: QuizAnswers[K]) {
     setAnswers((prev) => ({ ...prev, [key]: value }));
@@ -85,6 +88,31 @@ export function OnboardingQuiz() {
       goal: answers.goal,
     });
     const profile = deriveProfileLabel(answers);
+
+    async function saveSubmission() {
+      setSaveState("saving");
+      const { error } = await supabase.from("onboarding_submissions").insert({
+        email: email || null,
+        goal: answers.goal,
+        gender: answers.gender,
+        age: Number(answers.age),
+        height_cm: Number(answers.heightCm),
+        weight_kg: Number(answers.weightKg),
+        activity: answers.activity,
+        allergies: answers.allergies,
+        diet_type: answers.dietType,
+        has_condition: answers.hasCondition,
+        condition_note: answers.conditionNote || null,
+        cooking_time: answers.cookingTime,
+        bmr: result.bmr,
+        tdee: result.tdee,
+        target_calories: result.targetCalories,
+        protein_g: result.proteinG,
+        fat_g: result.fatG,
+        carb_g: result.carbG,
+      });
+      setSaveState(error ? "error" : "saved");
+    }
 
     return (
       <Card className="w-full max-w-xl">
@@ -139,13 +167,35 @@ export function OnboardingQuiz() {
 
           <DisclaimerNote />
 
+          {saveState === "saved" ? (
+            <div className="rounded-lg border bg-muted/40 p-4 text-center text-sm">
+              결과가 저장되었습니다. 프리미엄 상세 식단표는 준비 중입니다.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="q-email">이메일 (선택)</Label>
+              <Input
+                id="q-email"
+                type="email"
+                placeholder="결과를 이메일로 받아보고 싶다면 입력하세요"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              {saveState === "error" && (
+                <p className="text-sm text-destructive">저장에 실패했습니다. 다시 시도해주세요.</p>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <Button variant="outline" onClick={back}>
               다시 보기
             </Button>
-            <Button className="flex-1" disabled>
-              프리미엄으로 상세 식단표 받기 (준비 중)
-            </Button>
+            {saveState !== "saved" && (
+              <Button className="flex-1" onClick={saveSubmission} disabled={saveState === "saving"}>
+                {saveState === "saving" ? "저장 중..." : "결과 저장하기"}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
