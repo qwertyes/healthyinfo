@@ -3,17 +3,18 @@
 > 이 파일은 진행상황 추적용입니다. 작업을 끝낼 때마다 `[ ]`를 `[x]`로 바꾸고, 맨 위 **진행률**을 갱신하세요.
 > 새 세션(다음날 등)에서 작업을 이어갈 때는 이 파일을 먼저 읽고 미완료(`[ ]`) 항목부터 이어서 진행하면 됩니다.
 
-**진행률: 12 / 26 (46%)**
+**진행률: 13 / 26 (50%)**
 
 ## 사용자 확인이 필요해서 멈춘 항목
 - ~~채널명~~ → **확정: 한끼정답 (영문/기술명: Hankki)**
 - **도메인 구매**: 보류 — 정식 커스텀 도메인 없이 Vercel 기본 주소(`*.vercel.app`)로 운영
 - **Supabase 계정 생성**: 새 이메일로 가입 필요 (사용자 본인만 가능)
-- **Vercel 계정/프로젝트 생성**: 로그인 필요 (사용자 본인만 가능)
+- ~~Vercel 계정/프로젝트 생성~~ → **완료, 배포됨: https://hankki-nine.vercel.app**
 - **새 YouTube 채널 + Google Cloud OAuth 클라이언트 발급**: 기존 VocaMate(@KoreaNo1.) 채널과 다른 새 채널이 필요, 계정 로그인/동의 화면은 사용자 본인만 가능
-→ 이 3개(Supabase/Vercel/YouTube)가 준비되면 알려주세요. 나머지는 이어서 진행 가능합니다.
+→ Supabase, YouTube 두 개만 남았습니다. 준비되면 알려주세요.
 
 ## 지금까지 만들어진 것
+- **https://hankki-nine.vercel.app** — 실제 배포된 사이트 (Vercel 팀: Hankki, 계정: silvernatural2@gmail.com). GitHub master 브랜치에 push하면 자동 재배포됨.
 - `web/` — Next.js 웹앱 (홈 즉시체험 위젯, 온보딩 퀴즈, 결과 리포트, 개인정보/약관 페이지). `npx next dev`로 로컬 확인 가능.
 - `video-pipeline/` — TTS 생성(테스트 완료), 대본 생성 프롬프트(컴플라이언스 가드레일 포함), YouTube 업로드 모듈(재사용). 자세한 내용은 `video-pipeline/README.md` 참고.
 - `COMPLIANCE_COPY_GUIDE.md` — 모든 카피/대본 작성 시 지켜야 할 표현 규칙.
@@ -28,7 +29,7 @@
 - 스택: Next.js(App Router) + Vercel + Supabase
 - GitHub: VocaMate와 **같은 계정**, 별도 리포지토리(`healthyinfo`)
 - Supabase: VocaMate와 **다른 계정(다른 이메일)** — 무료 프로젝트 2개 한도가 계정 단위라서
-- Vercel: 수익화(구독/광고/제휴링크) 시작 전까지 Hobby 무료로 개발, 정식 오픈 시 Pro($20/월)로 전환 필요 (Hobby는 상업적 이용 금지 약관)
+- Vercel: 수익화(구독/광고/제휴링크) 시작 전까지 Hobby 무료로 개발, 정식 오픈 시 Pro($20/월)로 전환 필요 (Hobby는 상업적 이용 금지 약관). 계정: silvernatural2@gmail.com, 팀명 "Hankki", 프로젝트명 "hankki" → https://hankki-nine.vercel.app
 - 콘텐츠 표현 원칙: "치료/진단/주치의"급 문구 금지, 일반 정보 제공으로 포지셔닝 (의료법·건강기능식품법 리스크 회피)
 
 ---
@@ -39,7 +40,7 @@
 - [x] 진단/치료 표현 금지 카피 가이드 문서화 → `COMPLIANCE_COPY_GUIDE.md`
 - [x] GitHub `healthyinfo` 리포지토리 생성 (VocaMate와 동일 계정) → https://github.com/qwertyes/healthyinfo
 - [ ] Supabase 별도 계정 가입 + 프로젝트 생성
-- [ ] Vercel 프로젝트 생성 및 GitHub 연동 (Hobby로 시작)
+- [x] Vercel 프로젝트 생성 및 GitHub 연동 (Hobby로 시작) → https://hankki-nine.vercel.app (팀: Hankki, 계정: silvernatural2@gmail.com), master 브랜치 push마다 자동 배포됨
 
 ## Phase 1 · 웹 MVP
 - [x] Next.js(App Router) 프로젝트 스캐폴딩 → `web/` (Next.js 16 + Tailwind + shadcn/ui)
