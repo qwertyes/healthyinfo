@@ -16,3 +16,8 @@ venv/
 client_secret*.json
 credentials.json
 *.key
+
+# generated media samples
+video-pipeline/samples/
+*.mp3
+*.mp4
