@@ -15,7 +15,7 @@
 - **`script_prompt.py`의 `generate_script()`** — 실제 LLM 호출부. 지금은 `NotImplementedError`를
   던지도록 되어 있음. Vercel AI Gateway API 키가 준비되면 이 함수 안에서 모델을 호출하도록 구현.
 - **`youtube_upload.py`** (`my-video-creator/youtube_api.py`를 그대로 복사, 이미 범용적으로 작성되어
-  있어 수정 없이 재사용 가능) — 업로드하려면 **HealthyInfo 전용 YouTube 채널**을 새로 만들고,
+  있어 수정 없이 재사용 가능) — 업로드하려면 **한끼정답 전용 YouTube 채널**을 새로 만들고,
   그 채널에 대한 Google Cloud OAuth 클라이언트(`client_secrets.json`)를 발급받아
   `generate_credentials_locally()`로 `credentials.json`을 1회 생성해야 함.
   **주의**: 기존 VocaMate(`@KoreaNo1.`) 채널의 `credentials.json`을 재사용하면 안 됨 — 다른 채널.
