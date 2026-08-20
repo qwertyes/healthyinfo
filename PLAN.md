@@ -3,7 +3,7 @@
 > 이 파일은 진행상황 추적용입니다. 작업을 끝낼 때마다 `[ ]`를 `[x]`로 바꾸고, 맨 위 **진행률**을 갱신하세요.
 > 새 세션(다음날 등)에서 작업을 이어갈 때는 이 파일을 먼저 읽고 미완료(`[ ]`) 항목부터 이어서 진행하면 됩니다.
 
-**진행률: 14 / 26 (54%)**
+**진행률: 15 / 26 (58%)**
 
 ## 사용자 확인이 필요해서 멈춘 항목
 - ~~채널명~~ → **확정: 한끼정답 (영문/기술명: Hankki)**
@@ -44,10 +44,10 @@
 
 ## Phase 1 · 웹 MVP
 - [x] Next.js(App Router) 프로젝트 스캐폴딩 → `web/` (Next.js 16 + Tailwind + shadcn/ui)
-- [ ] Supabase 연동 (DB 스키마: 사용자, 온보딩 응답, 식단 결과) — Supabase 프로젝트 생성 대기
+- [x] Supabase 연동 (DB 스키마: 사용자, 온보딩 응답, 식단 결과) → `supabase/migrations/0001_init.sql` (profiles, onboarding_submissions, RLS 정책) 적용 완료. `web/src/lib/supabase/client.ts` 클라이언트 작성, 실제 배포 사이트에서 온보딩 퀴즈 → 저장까지 브라우저로 테스트 완료
 - [x] 홈 즉시체험 위젯 (나이/성별/활동량 입력 → 즉시 식단 미리보기) → `web/src/components/instant-widget.tsx`, BMR/TDEE 계산은 `web/src/lib/nutrition.ts`
-- [x] 온보딩 퍼스널라이제이션 퀴즈 (6문항) 구현 → `web/src/components/onboarding/onboarding-quiz.tsx` (답변은 현재 클라이언트 상태에만 저장 — Supabase 연동 후 DB 저장으로 교체 필요)
-- [ ] AI 맞춤 식단 생성 로직 (Vercel AI Gateway 연동) — Vercel 프로젝트 생성 대기
+- [x] 온보딩 퍼스널라이제이션 퀴즈 (6문항) 구현 → `web/src/components/onboarding/onboarding-quiz.tsx`, 결과 화면에서 이메일(선택) + Supabase 저장까지 연결됨
+- [ ] AI 맞춤 식단 생성 로직 (Vercel AI Gateway 연동) — 계정은 준비됐음, 아직 미착수
 - [x] 결과 리포트 화면 + 프리미엄 CTA → 온보딩 완료 시 리포트 화면 표시, 프리미엄 버튼은 결제 연동 전까지 비활성 상태
 - [x] 개인정보처리방침/약관 페이지 (건강 민감정보 동의 포함) → `web/src/app/privacy`, `web/src/app/terms` (초안, 법률 자문 전 공개 금지)
 
