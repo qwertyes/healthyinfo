@@ -6,7 +6,15 @@
 ## 지금 바로 되는 것 (계정 불필요, 테스트 완료)
 
 - **`tts.py`** — Edge TTS로 한국어 여성(`ko-KR-SunHiNeural`)/남성(`ko-KR-InJoonNeural`) 내레이션 생성.
-  API 키 없이 동작. `python tts.py`로 직접 실행하면 `samples/sample_female.mp3` 생성됨 (검증됨).
+  API 키 없이 동작. `generate_narration_with_captions()`는 문장 단위 타이밍(SentenceBoundary)까지
+  같이 반환한다 — 한국어 보이스는 단어 단위(WordBoundary) 타이밍을 지원하지 않아 문장 단위로 자막을
+  싱크한다. `python tts.py`로 직접 실행 확인 가능.
+- **`compose_video.py`** — 60초 세로(9:16, 1080x1920) 숏폼 영상 합성. 제목 + 문장 단위 자막(자동
+  줄바꿈) + 하단 브랜드 워드마크를 다크 배경 위에 렌더링하고 내레이션 오디오를 입혀 mp4로 출력한다.
+  ImageMagick 의존성을 피하려고 MoviePy `TextClip` 대신 PIL로 텍스트를 직접 렌더링했다(폰트:
+  `assets/fonts/NanumGothic.ttf`, 오픈소스 폰트를 리포에 번들). `python compose_video.py`로 직접
+  실행하면 `samples/sample_short.mp4` 생성됨 — 실제 mp4 출력, 프레임 캡처로 렌더링 확인 완료.
+  아직 배경 이미지/영상 소재나 효과음은 없음 (단색 배경 + 텍스트만 있는 최소 버전).
 - **`script_prompt.py`** — 대본 생성용 시스템 프롬프트 + JSON 출력 스키마.
   `COMPLIANCE_COPY_GUIDE.md`의 금지 표현/필수 고지 규칙이 프롬프트에 고정 삽입되어 있음.
 
@@ -29,14 +37,14 @@
 
 ## 아직 만들지 않은 것
 
-- 영상 합성(자막/배경/효과음 조립) — `my-video-creator/english_words_short.py`는 "10단어 플래시카드"
-  포맷에 특화되어 있어 그대로 재사용하기보다, 건강 팁 60초 포맷(후킹 → 핵심 정보 → 고지 문구)에 맞는
-  새 템플릿이 필요합니다. 비주얼 스타일(배경, 폰트, 자막 디자인)을 정하고 나서 작업하는 게 효율적이라
-  후순위로 남겨뒀습니다.
+- 배경 이미지/영상 소재, 효과음, BGM — 지금은 단색 배경 + 텍스트만 있는 최소 버전 (기능 검증 목적).
+  비주얼을 더 다듬고 싶으면 `compose_video.py`의 `BG_COLOR`/폰트 크기 등을 조정하거나 배경 레이어를
+  추가하면 됨.
 - 사람 검수 단계의 실제 워크플로(현재는 프로세스만 `PLAN.md`에 정의됨, 툴링은 미구현)
 
 ## 남은 실행 순서
 
 1. `script_prompt.generate_script()`에 Gemini 호출 구현
-2. 영상 합성 템플릿 작성 (자막/배경/효과음)
+2. `tts.generate_narration_with_captions_sync()` → `compose_video.compose_short()`로 이어붙이는
+   엔드투엔드 스크립트 작성 (지금은 각 모듈을 따로 실행해서 검증한 상태)
 3. `youtube_upload.upload_video()`로 첫 테스트 업로드 (`credentials.json`은 이미 준비됨)
