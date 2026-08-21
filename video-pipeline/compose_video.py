@@ -23,6 +23,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import AudioFileClip, CompositeAudioClip, CompositeVideoClip, ImageClip, VideoClip, vfx
 from moviepy.audio.AudioClip import AudioArrayClip
+import moviepy.audio.fx.all as afx
 
 from typecast_tts import WordTiming
 
@@ -45,7 +46,13 @@ ACCENT_COLOR = (255, 160, 80)
 CAPTION_SHADOW = (0, 0, 0)
 PANEL_COLOR = (0, 0, 0, 130)  # 자막 뒤 반투명 패널
 
-KARAOKE_MAX_CHARS = 30  # 자막 그룹당 최대 글자 수 (2줄 정도 분량 — 너무 자주 안 바뀌게)
+KARAOKE_MAX_CHARS = 34  # 문장부호가 없을 때의 안전장치 상한 (대략 2줄 분량)
+
+# YouTube Studio 오디오 보관함(공식, 저작자 표시 불필요)에서 받은 실제 라이선스 BGM.
+# "Corporate Mellow Groove" — Doug Maxwell, 설명형/정보성 콘텐츠에 흔히 쓰이는 잔잔한 트랙.
+BGM_PATH = os.path.join(os.path.dirname(__file__), "assets", "music", "corporate_mellow_groove.mp3")
+BGM_VOLUME = 0.05
+NARRATION_VOLUME = 0.95  # 내레이션을 정규화(피크=1.0) 후 살짝 헤드룸만 남기고 최대로 키운다
 
 
 def _font_bold(size: int) -> ImageFont.FreeTypeFont:
@@ -181,19 +188,36 @@ def make_photo_background_clip(photo_paths: list[str], duration: float) -> Video
 # ── 자막: 단어 단위 카라오케 하이라이트 ───────────────────────────────────
 
 
-def group_words_into_lines(words: list[WordTiming], max_chars: int = KARAOKE_MAX_CHARS) -> list[list[WordTiming]]:
-    """단어를 화면에 한 줄로 보여줄 만큼씩 묶는다."""
+_BREAK_PUNCTUATION = (".", ",", "!", "?")
+
+
+def group_words_into_lines(
+    words: list[WordTiming], max_chars: int = KARAOKE_MAX_CHARS, min_chars: int = 8
+) -> list[list[WordTiming]]:
+    """
+    단어를 자막 그룹으로 묶는다. 무조건 글자 수로만 끊으면 "쉼표 앞", "문장 중간" 같은 데서
+    부자연스럽게 끊기므로, **마침표·쉼표·물음표·느낌표에서 끊는 걸 우선**한다.
+    - min_chars보다 짧은 상태에서 쉼표를 만나면 아직 안 끊는다 (너무 짧은 조각 방지).
+    - 문장부호 없이 max_chars를 넘어가면 그 자리에서 강제로 끊는다 (안전장치).
+    """
     lines: list[list[WordTiming]] = []
     current: list[WordTiming] = []
     current_len = 0
+
     for w in words:
-        w_len = len(w.text) + 1
-        if current and current_len + w_len > max_chars:
+        current.append(w)
+        current_len += len(w.text) + 1
+        ends_with_break = w.text.rstrip().endswith(_BREAK_PUNCTUATION)
+
+        if ends_with_break and current_len >= min_chars:
             lines.append(current)
             current = []
             current_len = 0
-        current.append(w)
-        current_len += w_len
+        elif current_len >= max_chars:
+            lines.append(current)
+            current = []
+            current_len = 0
+
     if current:
         lines.append(current)
     return lines
@@ -353,12 +377,28 @@ def _synthesize_ambient_pad(duration: float, volume: float = 0.05) -> np.ndarray
     return np.column_stack([wave, wave])
 
 
+def _load_bgm_track(duration: float, volume: float = BGM_VOLUME) -> AudioFileClip | None:
+    """실제 라이선스 BGM 파일을 duration에 맞춰 루프하고 낮은 볼륨으로 페이드인/아웃한다.
+    파일이 없으면 None을 반환해서 절차적 합성 패드로 자동 폴백하게 한다."""
+    if not os.path.exists(BGM_PATH):
+        return None
+    bgm = AudioFileClip(BGM_PATH)
+    bgm = afx.audio_loop(bgm, duration=duration)
+    bgm = bgm.fx(afx.volumex, volume)
+    bgm = bgm.fx(afx.audio_fadein, 1.0).fx(afx.audio_fadeout, 1.5)
+    return bgm.set_duration(duration)
+
+
 def _build_sfx_track(lines: list[list[WordTiming]], duration: float) -> CompositeAudioClip:
     """
-    낮은 볼륨의 앰비언트 패드만 깐다. 원래는 자막 줄마다 "pop" 효과음도 넣었는데,
+    낮은 볼륨의 배경음악만 깐다. 원래는 자막 줄마다 "pop" 효과음도 넣었는데,
     실제로 들어보니 시청에 방해된다는 피드백을 받아 뺐다 (_synthesize_pop은 남겨두되 호출 안 함 —
-    나중에 다른 용도로 필요하면 재사용 가능).
+    나중에 다른 용도로 필요하면 재사용 가능). BGM은 YouTube 오디오 보관함에서 받은 실제 라이선스
+    트랙(BGM_PATH)을 우선 쓰고, 파일이 없을 때만 절차적으로 합성한 코드 진행 패드로 대체한다.
     """
+    bgm = _load_bgm_track(duration)
+    if bgm is not None:
+        return CompositeAudioClip([bgm])
     return CompositeAudioClip([AudioArrayClip(_synthesize_ambient_pad(duration), fps=AUDIO_FPS)])
 
 
@@ -374,6 +414,8 @@ def compose_short(
     background_photo_paths: list[str] | None = None,
 ) -> str:
     narration = AudioFileClip(audio_path)
+    # Typecast 원본 음성이 일반적인 쇼츠 설명 음성보다 작다는 피드백 → 정규화 후 최대 근처로 키운다.
+    narration = narration.fx(afx.audio_normalize).fx(afx.volumex, NARRATION_VOLUME)
     duration = narration.duration
 
     if background_photo_paths:
@@ -451,6 +493,9 @@ if __name__ == "__main__":
     from stock_photo import search_photos
     from typecast_tts import generate_narration_with_words
 
+    samples_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "samples")
+    os.makedirs(samples_dir, exist_ok=True)
+
     sample_title = "단백질, 하루 몇 그램이 적당할까?"
     sample_script = (
         "오늘의 건강 상식입니다. 단백질은 근육뿐 아니라 면역력 유지에도 중요한 역할을 합니다. "
@@ -459,11 +504,11 @@ if __name__ == "__main__":
     )
 
     audio_path, duration, words = generate_narration_with_words(
-        sample_script, "video-pipeline/samples/sample_narration_v3.wav"
+        sample_script, os.path.join(samples_dir, "sample_narration_v3.wav")
     )
-    photo_paths = search_photos("grilled chicken breast", "video-pipeline/samples/bg_v3", count=3)
+    photo_paths = search_photos("grilled chicken breast", os.path.join(samples_dir, "bg_v3"), count=3)
     out = compose_short(
-        sample_title, words, audio_path, "video-pipeline/samples/sample_short_v4.mp4",
+        sample_title, words, audio_path, os.path.join(samples_dir, "sample_short_v5.mp4"),
         background_photo_paths=photo_paths,
     )
     print(f"영상 생성 완료: {out} (배경 사진 {len(photo_paths)}장)")

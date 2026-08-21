@@ -23,5 +23,8 @@ video-pipeline/output/
 *.mp3
 *.mp4
 
+# BGM 자산은 폰트처럼 리포에 직접 번들 (YouTube 오디오 보관함, 저작자 표시 불필요 라이선스)
+!video-pipeline/assets/music/*.mp3
+
 # Claude Code local state
 .claude/

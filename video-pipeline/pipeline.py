@@ -21,6 +21,11 @@ import os
 import sys
 from datetime import datetime
 
+# Windows 콘솔 기본 코드페이지(cp949)가 이모지(⛔✅)를 못 그려서 print()가 죽는 문제 방지.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
@@ -80,6 +85,12 @@ def run(topic: str, cluster: str, voice_id: str = VOICE_PILJAE) -> str | None:
         return None
 
     issues = compliance_check(result.script)
+
+    # 필수 고지 문구 누락은 "잘못된 정보"가 아니라 정형화된 법적 boilerplate가 빠진 것뿐이라,
+    # 영상을 통째로 버리는 대신 자동으로 붙이고 재검사한다 (다른 위반은 그대로 차단).
+    if issues == ["필수 고지 문구가 없음"]:
+        result.script = result.script.rstrip() + " " + REQUIRED_DISCLAIMER
+        issues = compliance_check(result.script)
 
     date_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
