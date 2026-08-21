@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { DisclaimerNote } from "@/components/disclaimer-note";
+import { MealPlanPanel } from "@/components/onboarding/meal-plan-panel";
 import { supabase } from "@/lib/supabase/client";
 import {
   ACTIVITY_LABEL,
@@ -165,11 +166,13 @@ export function OnboardingQuiz() {
             )}
           </div>
 
+          <MealPlanPanel answers={answers} result={result} />
+
           <DisclaimerNote />
 
           {saveState === "saved" ? (
             <div className="rounded-lg border bg-muted/40 p-4 text-center text-sm">
-              결과가 저장되었습니다. 프리미엄 상세 식단표는 준비 중입니다.
+              결과가 저장되었습니다.
             </div>
           ) : (
             <div className="space-y-2">
