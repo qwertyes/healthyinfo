@@ -10,13 +10,13 @@
 - **도메인 구매**: 보류 — 정식 커스텀 도메인 없이 Vercel 기본 주소(`*.vercel.app`)로 운영
 - ~~Supabase 계정 생성~~ → **완료** (silvernatural2@gmail.com, 프로젝트 hankki, Seoul 리전)
 - ~~Vercel 계정/프로젝트 생성~~ → **완료, 배포됨: https://hankki-nine.vercel.app**
-- **새 YouTube 채널 + Google Cloud OAuth 클라이언트 발급**: 기존 VocaMate(@KoreaNo1.) 채널과 다른 새 채널이 필요, 계정 로그인/동의 화면은 사용자 본인만 가능
-→ YouTube 하나만 남았습니다.
+- ~~새 YouTube 채널 + Google Cloud OAuth 클라이언트 발급~~ → **완료** (silvernatural2@gmail.com, 채널명 "한끼정답", GCP 프로젝트 "hankki-video", `video-pipeline/credentials.json` 발급 및 API 호출 테스트 완료)
+→ 사용자 확인이 필요한 항목은 모두 끝났습니다. 이제부터는 계정/인프라가 아니라 실제 콘텐츠 제작(영상 템플릿, 대본, 업로드) 작업입니다.
 
 ## 지금까지 만들어진 것
 - **https://hankki-nine.vercel.app** — 실제 배포된 사이트 (Vercel 팀: Hankki, 계정: silvernatural2@gmail.com). GitHub master 브랜치에 push하면 자동 재배포됨.
 - `web/` — Next.js 웹앱 (홈 즉시체험 위젯, 온보딩 퀴즈, 결과 리포트, 개인정보/약관 페이지). `npx next dev`로 로컬 확인 가능.
-- `video-pipeline/` — TTS 생성(테스트 완료), 대본 생성 프롬프트(컴플라이언스 가드레일 포함), YouTube 업로드 모듈(재사용). 자세한 내용은 `video-pipeline/README.md` 참고.
+- `video-pipeline/` — TTS 생성(테스트 완료), 대본 생성 프롬프트(컴플라이언스 가드레일 포함), YouTube 업로드 모듈(재사용), **credentials.json 발급 완료 및 채널 API 호출 검증 완료** (채널: 한끼정답, 계정: silvernatural2@gmail.com). 자세한 내용은 `video-pipeline/README.md` 참고.
 - `COMPLIANCE_COPY_GUIDE.md` — 모든 카피/대본 작성 시 지켜야 할 표현 규칙.
 
 ## 참고 문서 (배경/근거)
@@ -32,6 +32,7 @@
 - Vercel: 수익화(구독/광고/제휴링크) 시작 전까지 Hobby 무료로 개발, 정식 오픈 시 Pro($20/월)로 전환 필요 (Hobby는 상업적 이용 금지 약관). 계정: silvernatural2@gmail.com, 팀명 "Hankki", 프로젝트명 "hankki" → https://hankki-nine.vercel.app
 - 콘텐츠 표현 원칙: "치료/진단/주치의"급 문구 금지, 일반 정보 제공으로 포지셔닝 (의료법·건강기능식품법 리스크 회피)
 - AI 식단 생성: Vercel AI Gateway가 아니라 **Google Gemini 직접 호출**(`@ai-sdk/google`) 사용. GEMINI_API_KEY는 my-video-creator(VocaMate)와 **동일한 프로덕션 키를 재사용** (GCS `my-video-shorts-bucket/configs/config.json`에서 확인, 사용자가 명시적으로 재사용 결정 — 트래픽 늘면 VocaMate와 쿼터 경쟁 가능성 있음, 필요시 분리 키로 전환)
+- YouTube: 계정 silvernatural2@gmail.com, 채널명 "한끼정답", Google Cloud 프로젝트 "hankki-video" (VocaMate와 별도). OAuth는 아직 "테스트" 상태(silvernatural2@gmail.com이 테스트 사용자로 등록됨) — 정식 공개 전환은 Phase 4 수익화 단계에서 필요시 진행
 
 ---
 
@@ -58,7 +59,7 @@
 - [x] 건강정보 대본 생성 프롬프트 작성 → `video-pipeline/script_prompt.py` (컴플라이언스 가드레일 포함, 실행 검증 완료). 단, 실제 LLM 호출부는 API 키 대기 중 (`generate_script()`가 `NotImplementedError`)
 - [ ] 영상 합성 템플릿 제작 (자막/효과음) — 비주얼 스타일 결정 필요, 후순위로 보류
 - [ ] 사람 검수 단계 프로세스 정의 (유튜브 비진정성 콘텐츠 정책 대응) — 프로세스는 COMPLIANCE_COPY_GUIDE.md에 체크리스트로 존재, 실제 검수 툴링은 미구현
-- [ ] "오늘의 건강 상식" 숏폼 테스트 업로드 1편 — 새 YouTube 채널 + OAuth 클라이언트 발급 필요 (video-pipeline/README.md 참고)
+- [ ] "오늘의 건강 상식" 숏폼 테스트 업로드 1편 — 채널/인증은 완료됨(`video-pipeline/credentials.json`), 실제 영상 파일을 만들 템플릿이 아직 없어서 대기 중
 
 ## Phase 3 · 연결 고리 구축
 - [ ] 영상 설명란/고정댓글 웹사이트 링크 템플릿화

@@ -13,12 +13,19 @@
 ## 계정/키가 있어야 되는 것
 
 - **`script_prompt.py`의 `generate_script()`** — 실제 LLM 호출부. 지금은 `NotImplementedError`를
-  던지도록 되어 있음. Vercel AI Gateway API 키가 준비되면 이 함수 안에서 모델을 호출하도록 구현.
-- **`youtube_upload.py`** (`my-video-creator/youtube_api.py`를 그대로 복사, 이미 범용적으로 작성되어
-  있어 수정 없이 재사용 가능) — 업로드하려면 **한끼정답 전용 YouTube 채널**을 새로 만들고,
-  그 채널에 대한 Google Cloud OAuth 클라이언트(`client_secrets.json`)를 발급받아
-  `generate_credentials_locally()`로 `credentials.json`을 1회 생성해야 함.
-  **주의**: 기존 VocaMate(`@KoreaNo1.`) 채널의 `credentials.json`을 재사용하면 안 됨 — 다른 채널.
+  던지도록 되어 있음. 웹(`web/src/app/api/meal-plan/route.ts`)과 동일하게 Gemini(`GEMINI_API_KEY`,
+  my-video-creator와 동일 키)를 직접 호출하도록 구현 예정.
+
+## 완료된 것 (채널/인증)
+
+- **YouTube 채널**: "한끼정답" (계정 silvernatural2@gmail.com, VocaMate `@KoreaNo1.`과 별도)
+- **Google Cloud 프로젝트**: `hankki-video`, YouTube Data API v3 활성화됨
+- **OAuth 클라이언트**: 데스크톱 앱 타입, `client_secret.json`으로 로컬에 저장(gitignore 처리)
+- **`credentials.json`**: `generate_credentials.py`로 1회 인증 완료, `youtube.upload` +
+  `youtube.force-ssl` 스코프 보유. `get_authenticated_service()`로 채널 정보 조회까지 테스트 완료.
+- OAuth 앱은 아직 **"테스트" 상태** — silvernatural2@gmail.com이 테스트 사용자로 등록되어 있어
+  본인 계정으로는 계속 사용 가능. 채널 소유자가 아닌 다른 사람이 관리자로 필요해지면 그때
+  테스트 사용자를 추가하거나 앱을 정식 게시해야 함.
 
 ## 아직 만들지 않은 것
 
@@ -28,10 +35,8 @@
   후순위로 남겨뒀습니다.
 - 사람 검수 단계의 실제 워크플로(현재는 프로세스만 `PLAN.md`에 정의됨, 툴링은 미구현)
 
-## 실행 순서 (계정 준비 후)
+## 남은 실행 순서
 
-1. `pip install -r requirements.txt`
-2. Google Cloud Console에서 새 프로젝트 생성 → YouTube Data API v3 활성화 → OAuth 클라이언트(데스크톱 앱) 발급
-3. `youtube_upload.generate_credentials_locally(client_secrets_file, "credentials.json")` 1회 실행 (브라우저 인증)
-4. `script_prompt.generate_script()`에 LLM 호출 구현
-5. 영상 합성 템플릿 작성 후 `youtube_upload.upload_video()`로 업로드
+1. `script_prompt.generate_script()`에 Gemini 호출 구현
+2. 영상 합성 템플릿 작성 (자막/배경/효과음)
+3. `youtube_upload.upload_video()`로 첫 테스트 업로드 (`credentials.json`은 이미 준비됨)
