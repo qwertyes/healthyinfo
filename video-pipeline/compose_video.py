@@ -45,7 +45,7 @@ ACCENT_COLOR = (255, 160, 80)
 CAPTION_SHADOW = (0, 0, 0)
 PANEL_COLOR = (0, 0, 0, 130)  # 자막 뒤 반투명 패널
 
-KARAOKE_MAX_CHARS = 16  # 자막 한 줄당 최대 글자 수 (대략)
+KARAOKE_MAX_CHARS = 30  # 자막 그룹당 최대 글자 수 (2줄 정도 분량 — 너무 자주 안 바뀌게)
 
 
 def _font_bold(size: int) -> ImageFont.FreeTypeFont:
@@ -199,46 +199,83 @@ def group_words_into_lines(words: list[WordTiming], max_chars: int = KARAOKE_MAX
     return lines
 
 
-def _render_karaoke_frame(word_texts: list[str], highlight_idx: int, font_size: int) -> Image.Image:
-    """한 줄의 모든 단어를 그리되, highlight_idx번째 단어만 포인트 컬러로 강조한다.
-    같은 줄의 모든 프레임이 동일한 캔버스 크기를 쓰도록 전체 텍스트 기준으로 크기를 잡는다
-    (그래야 단어가 바뀔 때 패널 크기가 흔들리지 않는다)."""
-    font = _font_bold(font_size)
+def _layout_words(
+    word_texts: list[str], font: ImageFont.FreeTypeFont, max_width: int
+) -> tuple[list[list[tuple[str, float]]], list[float]]:
+    """단어를 max_width 안에서 여러 줄로 나눈다. 반환: (줄별 [(단어, 그 줄 안에서의 x좌표)], 줄별 내용 너비)."""
     probe = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
-    full_line = " ".join(word_texts)
+    space_w = probe.textlength(" ", font=font)
+
+    lines: list[list[tuple[str, float]]] = []
+    line_widths: list[float] = []
+    current: list[tuple[str, float]] = []
+    current_x = 0.0
+
+    for word in word_texts:
+        word_w = probe.textlength(word, font=font)
+        needed = current_x + (space_w if current else 0) + word_w
+        if current and needed > max_width:
+            lines.append(current)
+            line_widths.append(current_x)
+            current = []
+            current_x = 0.0
+        x_pos = current_x + (space_w if current else 0)
+        current.append((word, x_pos))
+        current_x = x_pos + word_w
+
+    if current:
+        lines.append(current)
+        line_widths.append(current_x)
+
+    return lines, line_widths
+
+
+def _render_karaoke_frame(word_texts: list[str], highlight_idx: int, font_size: int, max_width: int) -> Image.Image:
+    """여러 줄(최대 2줄 정도)에 걸쳐 단어를 그리되, highlight_idx번째 단어만 포인트 컬러로 강조한다.
+    같은 그룹의 모든 프레임이 동일한 레이아웃/캔버스 크기를 쓰도록 word_texts 전체 기준으로
+    줄바꿈을 미리 계산한다 (그래야 단어가 바뀔 때 패널 크기·줄바꿈이 흔들리지 않는다)."""
+    font = _font_bold(font_size)
+    layout, line_widths = _layout_words(word_texts, font, max_width)
 
     pad_x, pad_y = 32, 20
-    line_w = probe.textlength(full_line, font=font)
-    img_w = int(line_w) + pad_x * 2
-    img_h = int(font_size * 1.4) + pad_y * 2
+    line_height = int(font_size * 1.4)
+    content_w = max(line_widths, default=0)
+    img_w = int(content_w) + pad_x * 2
+    img_h = line_height * len(layout) + pad_y * 2
 
     img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     draw.rounded_rectangle([0, 0, img_w, img_h], radius=22, fill=PANEL_COLOR)
 
-    x = pad_x
-    y = pad_y
-    for i, word in enumerate(word_texts):
-        color = ACCENT_COLOR if i == highlight_idx else CAPTION_COLOR
-        draw.text((x + 3, y + 3), word, font=font, fill=(*CAPTION_SHADOW, 180))
-        draw.text((x, y), word, font=font, fill=(*color, 255))
-        x += probe.textlength(word + " ", font=font)
+    global_idx = 0
+    for line_i, line_words in enumerate(layout):
+        y = pad_y + line_i * line_height
+        x_offset = pad_x + (content_w - line_widths[line_i]) / 2  # 짧은 줄은 가운데 정렬
+        for word, x in line_words:
+            color = ACCENT_COLOR if global_idx == highlight_idx else CAPTION_COLOR
+            draw.text((x_offset + x + 3, y + 3), word, font=font, fill=(*CAPTION_SHADOW, 180))
+            draw.text((x_offset + x, y), word, font=font, fill=(*color, 255))
+            global_idx += 1
 
     return img
 
 
-def _karaoke_line_clips(line: list[WordTiming], target_y: float, font_size: int) -> list[ImageClip]:
-    """한 줄(여러 단어)을, 단어가 바뀔 때마다 하이라이트만 이동하는 클립들로 만든다."""
+def _karaoke_line_clips(line: list[WordTiming], font_size: int, max_width: int) -> list[ImageClip]:
+    """한 그룹(여러 단어, 최대 2줄)을, 단어가 바뀔 때마다 하이라이트만 이동하는 클립들로 만든다."""
     word_texts = [w.text for w in line]
     line_end = line[-1].end
     clips = []
+
+    # 그룹의 레이아웃(줄 수)은 고정이므로 높이를 한 번만 계산해 세로 위치를 잡는다.
+    sample_img = _render_karaoke_frame(word_texts, -1, font_size, max_width)
+    target_y = HEIGHT / 2 - sample_img.height / 2
 
     for i, w in enumerate(line):
         seg_start = w.start
         seg_end = line[i + 1].start if i + 1 < len(line) else line_end
         seg_duration = max(seg_end - seg_start, 0.05)
 
-        img = _render_karaoke_frame(word_texts, i, font_size)
+        img = _render_karaoke_frame(word_texts, i, font_size, max_width)
         clip = ImageClip(np.array(img)).set_start(seg_start).set_duration(seg_duration)
         clip = clip.set_position(("center", target_y))
         clips.append(clip)
@@ -261,26 +298,68 @@ def _synthesize_pop(duration: float = 0.10, freq: float = 720.0, volume: float =
     return np.column_stack([wave, wave])
 
 
-def _synthesize_ambient_pad(duration: float, volume: float = 0.035) -> np.ndarray:
-    """아주 낮은 볼륨의 은은한 패드(도-솔 화음). BGM 대용 — 나레이션을 방해하지 않는 선."""
+# Am - F - C - G, 로파이/잔잔한 분위기에 흔히 쓰이는 코드 진행. 각 코드는 (근음, 3음, 5음) Hz.
+_BGM_PROGRESSION = [
+    (220.00, 261.63, 329.63),  # Am
+    (174.61, 220.00, 261.63),  # F
+    (130.81, 164.81, 196.00),  # C
+    (196.00, 246.94, 293.66),  # G
+]
+_BGM_CHORD_SECONDS = 2.4
+
+
+def _synthesize_ambient_pad(duration: float, volume: float = 0.05) -> np.ndarray:
+    """
+    코드 진행이 있는 잔잔한 배경음악. 화음 하나만 계속 울리던 이전 버전보다 훨씬 "음악"처럼
+    들리도록, 코드가 바뀌면서 진행되게 합성했다. 여전히 나레이션보다 한참 낮은 볼륨으로 깐다.
+    (진짜 라이선스 있는 BGM으로 나중에 교체할 수 있지만, 지금은 API 키를 새로 안 받아도 되는
+    이 방식으로 우선 개선했다.)
+    """
     n = int(AUDIO_FPS * duration)
-    t = np.linspace(0, duration, n, endpoint=False)
-    root, fifth = 130.81, 196.00  # C3, G3
-    wave = (np.sin(2 * np.pi * root * t) + 0.6 * np.sin(2 * np.pi * fifth * t)) * volume
+    wave = np.zeros(n)
+    num_chords = int(np.ceil(duration / _BGM_CHORD_SECONDS))
+
+    for i in range(num_chords):
+        chord = _BGM_PROGRESSION[i % len(_BGM_PROGRESSION)]
+        start_t = i * _BGM_CHORD_SECONDS
+        end_t = min(duration, start_t + _BGM_CHORD_SECONDS)
+        seg_n = int((end_t - start_t) * AUDIO_FPS)
+        if seg_n <= 0:
+            continue
+
+        seg_t = np.linspace(0, end_t - start_t, seg_n, endpoint=False)
+        seg_wave = np.zeros(seg_n)
+        for freq in chord:
+            seg_wave += 0.6 * np.sin(2 * np.pi * freq * seg_t) + 0.15 * np.sin(2 * np.pi * freq * 2 * seg_t)
+        seg_wave /= len(chord)
+
+        # 코드 전환마다 클릭 소리 안 나게 부드럽게 붙였다 뗀다.
+        ramp = min(seg_n // 4, int(AUDIO_FPS * 0.4))
+        if ramp > 0:
+            seg_wave[:ramp] *= np.linspace(0, 1, ramp)
+            seg_wave[-ramp:] *= np.linspace(1, 0, ramp)
+
+        start_idx = int(start_t * AUDIO_FPS)
+        end_idx = min(n, start_idx + seg_n)
+        wave[start_idx:end_idx] += seg_wave[: end_idx - start_idx]
+
+    wave *= volume
+
     fade_len = min(n // 2, int(AUDIO_FPS * 1.5))
-    fade = np.ones(n)
-    fade[:fade_len] = np.linspace(0, 1, fade_len)
-    fade[-fade_len:] = np.linspace(1, 0, fade_len)
-    return np.column_stack([wave * fade, wave * fade])
+    if fade_len > 0:
+        wave[:fade_len] *= np.linspace(0, 1, fade_len)
+        wave[-fade_len:] *= np.linspace(1, 0, fade_len)
+
+    return np.column_stack([wave, wave])
 
 
 def _build_sfx_track(lines: list[list[WordTiming]], duration: float) -> CompositeAudioClip:
-    """자막 줄이 새로 시작될 때마다(단어마다는 너무 잦아서) pop 효과음을 준다."""
-    clips = [AudioArrayClip(_synthesize_ambient_pad(duration), fps=AUDIO_FPS)]
-    for line in lines:
-        pop = AudioArrayClip(_synthesize_pop(), fps=AUDIO_FPS).set_start(line[0].start)
-        clips.append(pop)
-    return CompositeAudioClip(clips)
+    """
+    낮은 볼륨의 앰비언트 패드만 깐다. 원래는 자막 줄마다 "pop" 효과음도 넣었는데,
+    실제로 들어보니 시청에 방해된다는 피드백을 받아 뺐다 (_synthesize_pop은 남겨두되 호출 안 함 —
+    나중에 다른 용도로 필요하면 재사용 가능).
+    """
+    return CompositeAudioClip([AudioArrayClip(_synthesize_ambient_pad(duration), fps=AUDIO_FPS)])
 
 
 # ── 조립 ──────────────────────────────────────────────────────────────
@@ -316,13 +395,12 @@ def compose_short(
         )
     )
 
-    caption_font_size = 52
-    caption_line_height = int(caption_font_size * 1.4) + 20 * 2
-    target_y = HEIGHT / 2 - caption_line_height / 2
+    caption_font_size = 50
+    caption_max_width = WIDTH - 200
 
     lines = group_words_into_lines(words)
     for line in lines:
-        layers.extend(_karaoke_line_clips(line, target_y, caption_font_size))
+        layers.extend(_karaoke_line_clips(line, caption_font_size, caption_max_width))
 
     brand_img = _render_text_brand(brand_label)
     brand_clip = ImageClip(np.array(brand_img)).set_start(0).set_duration(duration).set_position(("center", HEIGHT - 140))
