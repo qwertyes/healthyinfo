@@ -26,6 +26,23 @@ Phase 2 항목은 전부 체크됐지만, 실제 업로드해본 영상(`video_i
 - 실제 렌더링 후 프레임 캡처로 확인 완료, `pipeline.py`(완전 자동)와 연동 테스트도 통과.
   아직 없는 것: 실제 배경 영상/이미지 소재(스톡 영상), 진짜 녹음된 BGM(라이선스 있는 음원)
 
+## 완료 — 영상 퀄리티 개선 2차 (v3, 2026-08-21)
+v2를 실제로 보고도 "너무 단조롭다"는 피드백을 받아, 인기 쇼츠 생성기들이 공통으로 쓰는 기법
+3가지를 적용:
+- [x] **TTS를 Typecast로 교체** → `video-pipeline/typecast_tts.py`. 목소리는 "필재"
+  (지식/정보 콘텐츠에 인기 있는 것으로 확인됨). my-video-creator와 동일한 TYPECAST_API_KEY 재사용.
+  **단어 단위 타임스탬프**를 제공해서(edge-tts는 한국어 문장 단위만 지원했음) 카라오케 자막이
+  가능해짐
+- [x] **카라오케 자막** → 문장 전체가 한번에 뜨던 방식에서, 말하는 단어가 실시간으로 포인트
+  컬러로 하이라이트되는 방식으로 변경 (`compose_video.py`의 `group_words_into_lines` +
+  `_karaoke_line_clips`)
+- [x] **배경 사진을 여러 장으로 전환** → Pexels에서 `image_query`로 사진 3장을 받아 구간별로
+  전환 (`stock_photo.search_photos`), 각 구간 켄 번즈 줌인 유지
+- [x] **폰트를 Black Han Sans(굵은 임팩트 폰트)로 교체** → 제목/자막용. 나눔고딕은 워드마크에만
+  유지. 오픈소스 폰트 리포에 번들(`assets/fonts/BlackHanSans-Regular.ttf`)
+- `script_prompt.py`의 출력 스키마에 `image_query`(영어 배경사진 검색어) 필드 추가
+- 실제 파이프라인 엔드투엔드 실행으로 검증 완료 (주제: "다이어트 중 야식이 당길 때 대처법")
+
 ## 중요 결정 — 사람 검수 제거, 완전 자동화로 전환 (2026-08-21)
 사용자가 회사 다니느라 매번 대본을 검수할 시간이 없다고 해서, `pipeline.py`의 사람 검수(y/N
 확인) 단계를 없애고 **완전 자동화**로 바꿨습니다. 대신 "잘못된 건강정보가 그대로 나가면 안 된다"는
@@ -66,6 +83,9 @@ Phase 2 항목은 전부 체크됐지만, 실제 업로드해본 영상(`video_i
 - 콘텐츠 표현 원칙: "치료/진단/주치의"급 문구 금지, 일반 정보 제공으로 포지셔닝 (의료법·건강기능식품법 리스크 회피)
 - AI 식단 생성: Vercel AI Gateway가 아니라 **Google Gemini 직접 호출**(`@ai-sdk/google`) 사용. GEMINI_API_KEY는 my-video-creator(VocaMate)와 **동일한 프로덕션 키를 재사용** (GCS `my-video-shorts-bucket/configs/config.json`에서 확인, 사용자가 명시적으로 재사용 결정 — 트래픽 늘면 VocaMate와 쿼터 경쟁 가능성 있음, 필요시 분리 키로 전환)
 - YouTube: 계정 silvernatural2@gmail.com, 채널명 "한끼정답", Google Cloud 프로젝트 "hankki-video" (VocaMate와 별도). OAuth는 아직 "테스트" 상태(silvernatural2@gmail.com이 테스트 사용자로 등록됨) — 정식 공개 전환은 Phase 4 수익화 단계에서 필요시 진행
+- 영상 TTS: **Typecast** 사용(목소리 "필재"), GEMINI_API_KEY와 마찬가지로 my-video-creator(VocaMate)와 **동일한 TYPECAST_API_KEY 재사용**
+- 영상 배경 사진: **Pexels API** 사용, silvernatural2@gmail.com 계정으로 새로 발급(PEXELS_API_KEY)
+- `video-pipeline/`의 API 키들은 `video-pipeline/.env` 파일로 관리 (python-dotenv, gitignore 처리됨) — 이전엔 터미널에 직접 입력했지만 키가 3개(Gemini/Pexels/Typecast)로 늘어나서 파일로 전환
 
 ---
 

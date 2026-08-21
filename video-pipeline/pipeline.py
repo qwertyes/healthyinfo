@@ -26,7 +26,8 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 from compose_video import compose_short
 from script_prompt import GeneratedScript, ScriptRequest, UnverifiedContentError, generate_script
-from tts import VOICE_FEMALE, generate_narration_with_captions_sync
+from stock_photo import search_photos
+from typecast_tts import VOICE_PILJAE, generate_narration_with_words
 
 # COMPLIANCE_COPY_GUIDE.md의 금지 표현 목록 — 자동 점검용 (사람 검수 없이 이게 최종 게이트)
 BANNED_PATTERNS = [
@@ -60,6 +61,7 @@ def _save_metadata(path: str, result: GeneratedScript, issues: list[str]) -> Non
                 "script": result.script,
                 "source": result.source,
                 "tags": result.tags,
+                "image_query": result.image_query,
                 "grounding_sources": result.grounding_sources,
                 "compliance_issues": issues,
             },
@@ -69,7 +71,7 @@ def _save_metadata(path: str, result: GeneratedScript, issues: list[str]) -> Non
         )
 
 
-def run(topic: str, cluster: str, voice: str = VOICE_FEMALE) -> str | None:
+def run(topic: str, cluster: str, voice_id: str = VOICE_PILJAE) -> str | None:
     print(f"대본 생성 중... (주제: {topic})")
     try:
         result = generate_script(ScriptRequest(topic=topic, cluster=cluster))
@@ -81,8 +83,9 @@ def run(topic: str, cluster: str, voice: str = VOICE_FEMALE) -> str | None:
 
     date_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    audio_path = os.path.join(OUTPUT_DIR, f"{date_tag}_narration.mp3")
+    audio_path = os.path.join(OUTPUT_DIR, f"{date_tag}_narration.wav")
     video_path = os.path.join(OUTPUT_DIR, f"{date_tag}_short.mp4")
+    photo_prefix = os.path.join(OUTPUT_DIR, f"{date_tag}_bg")
     metadata_path = os.path.join(OUTPUT_DIR, f"{date_tag}_metadata.json")
     _save_metadata(metadata_path, result, issues)
 
@@ -96,11 +99,18 @@ def run(topic: str, cluster: str, voice: str = VOICE_FEMALE) -> str | None:
         print(f"(대본 내용은 {metadata_path}에 남겨뒀습니다 — 나중에 확인 가능)")
         return None
 
-    print("✅ 자동 점검 통과 — 음성/자막 생성 중...")
-    audio_path, captions = generate_narration_with_captions_sync(result.script, audio_path, voice=voice)
+    print("✅ 자동 점검 통과 — 음성/단어 타이밍 생성 중 (Typecast, 필재 보이스)...")
+    audio_path, duration, words = generate_narration_with_words(result.script, audio_path, voice_id=voice_id)
 
-    print("영상 합성 중...")
-    compose_short(result.title, captions, audio_path, video_path)
+    print(f"배경 사진 검색 중... ({result.image_query})")
+    photo_paths = search_photos(result.image_query, photo_prefix, count=3)
+    if photo_paths:
+        print(f"배경 사진 확보: {len(photo_paths)}장")
+    else:
+        print("배경 사진을 못 찾아서 그라데이션 배경으로 대체합니다.")
+
+    print("영상 합성 중 (카라오케 자막)...")
+    compose_short(result.title, words, audio_path, video_path, background_photo_paths=photo_paths or None)
 
     print(f"\n✅ 완료: {video_path}")
     print(f"메타데이터(스팟체크용): {metadata_path}")

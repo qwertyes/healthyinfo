@@ -15,7 +15,10 @@ import os
 from dataclasses import dataclass, field
 
 import google.genai as genai
+from dotenv import load_dotenv
 from google.genai import types as genai_types
+
+load_dotenv()
 
 MODEL_NAME = "gemini-3.1-flash-lite"  # my-video-creator와 동일한 저비용 티어
 
@@ -26,8 +29,9 @@ RESPONSE_SCHEMA = {
         "script": {"type": "string"},
         "source": {"type": "string"},
         "tags": {"type": "array", "items": {"type": "string"}},
+        "image_query": {"type": "string"},
     },
-    "required": ["title", "script", "source", "tags"],
+    "required": ["title", "script", "source", "tags", "image_query"],
 }
 
 SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏폼 대본 작가입니다.
@@ -68,13 +72,17 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
 12. 60초 낭독 기준(약 350~420자)의 한국어 대본. 첫 문장은 후킹 문장이어야 합니다.
 13. 마지막 문장은 항상 다음 고지 문구로 마무리하세요:
    "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
+14. "image_query"에는 영상 배경으로 쓸 스톡 사진을 검색할 **영어** 키워드를 2~4단어로 쓰세요.
+   구체적이고 눈에 보이는 대상을 묘사하세요 (예: "grilled chicken breast", "person drinking water",
+   "fresh vegetables market"). 추상적인 개념어(예: "health", "nutrition")만 쓰지 마세요.
 
 출력은 반드시 아래 JSON 스키마를 따르세요:
 {
   "title": "영상 제목 (후킹 문구 포함, 40자 이내)",
   "script": "실제 낭독할 전체 대본 (고지 문구 포함)",
   "source": "실제 검색으로 확인한 출처 (기관/연구명). 일반 상식 수준이라 특정 출처가 없으면 빈 문자열",
-  "tags": ["영상 태그", "..."]
+  "tags": ["영상 태그", "..."],
+  "image_query": "배경 사진 검색용 영어 키워드"
 }"""
 
 
@@ -94,6 +102,7 @@ class GeneratedScript:
     script: str
     source: str
     tags: list[str]
+    image_query: str
     grounding_sources: list[dict] = field(default_factory=list)  # [{"title":.., "uri":..}, ...] 실제 검색 근거
 
 
@@ -175,6 +184,7 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
         script=data["script"],
         source=data["source"],
         tags=data["tags"],
+        image_query=data["image_query"],
         grounding_sources=sources,
     )
 
@@ -186,6 +196,7 @@ if __name__ == "__main__":
     print(f"대본: {result.script}")
     print(f"출처(자체 기재): {result.source}")
     print(f"태그: {result.tags}")
+    print(f"이미지 검색어: {result.image_query}")
     print("검색 그라운딩 근거:")
     for s in result.grounding_sources:
         print(f"  - {s['title']}: {s['uri']}")

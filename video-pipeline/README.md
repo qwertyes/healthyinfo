@@ -3,38 +3,37 @@
 건강정보 숏폼 자동화 파이프라인. `my-video-creator`(단어장/코인뉴스 채널)의 구조를 재사용하되,
 건강 니치에 맞게 간결화하고 컴플라이언스 가드레일을 넣었습니다. 근거: [PLAN.md](../PLAN.md) Phase 2.
 
-## 지금 바로 되는 것 (계정 불필요, 테스트 완료)
+**완전 자동 모드**로 설계되어 있습니다 — 사람 검수 없이 매일 실행하는 걸 전제로,
+검색 그라운딩 기반 자동 사실확인 + 컴플라이언스 키워드 스캔이 안전장치 역할을 합니다.
 
-- **`tts.py`** — Edge TTS로 한국어 여성(`ko-KR-SunHiNeural`)/남성(`ko-KR-InJoonNeural`) 내레이션 생성.
-  API 키 없이 동작. `generate_narration_with_captions()`는 문장 단위 타이밍(SentenceBoundary)까지
-  같이 반환한다 — 한국어 보이스는 단어 단위(WordBoundary) 타이밍을 지원하지 않아 문장 단위로 자막을
-  싱크한다. `python tts.py`로 직접 실행 확인 가능.
-- **`compose_video.py`** — 60초 세로(9:16, 1080x1920) 숏폼 영상 합성. v2에서 퀄리티를 크게
-  올렸다: numpy로 생성한 그라데이션+숨쉬는 글로우 배경, 자막 페이드인/슬라이드업 애니메이션 +
-  반투명 패널, 자막 등장마다 절차적으로 합성한 "pop" 효과음 + 낮은 볼륨 앰비언트 패드, 제목
-  언더라인 등 브랜딩 디테일. 전부 numpy/PIL로 직접 생성해서 외부 이미지·영상·음원 소재가 전혀
-  필요 없다(라이선스 걱정 없음). ImageMagick 의존성을 피하려고 MoviePy `TextClip` 대신 PIL로
-  텍스트를 직접 렌더링했다(폰트: `assets/fonts/NanumGothic.ttf`, 오픈소스 폰트를 리포에 번들).
-  `python compose_video.py`로 직접 실행하면 `samples/sample_short_v2.mp4` 생성됨 — 실제 mp4
-  출력, 프레임 캡처로 렌더링 확인 완료.
-- **`script_prompt.py`** — Gemini(`gemini-3.1-flash-lite`, my-video-creator와 동일 키/모델)로
-  대본을 생성한다. **완전 자동화(사람 검수 없음)를 전제로 2단계 구조**: ①검색 전용 호출로
-  Google 검색 그라운딩을 통해 사실을 모으고, ②그 사실만 근거로 컴플라이언스 규칙에 맞춰 대본을
-  작성한다. 검색 근거가 하나도 없으면 `UnverifiedContentError`를 던져서 자동으로 생성을 막는다 —
-  "지어낸 통계"가 나가는 걸 막는 최소 안전장치다. (처음엔 검색+작성을 한 번에 시켰더니 시스템
-  프롬프트가 복잡해서 모델이 검색 도구 호출을 자꾸 건너뛰는 문제가 있었고, 2단계로 분리해서
-  해결했다.)
-- **`pipeline.py`** — 대본 생성(검색 그라운딩 포함) → 자동 컴플라이언스 점검(금지어 스캔, 위반 시
-  자동 스킵) → 음성/자막 생성 → 영상 합성까지 **사람 개입 없이** 이어지는 엔드투엔드 스크립트.
-  `python pipeline.py "주제" "클러스터"`로 실행. 모든 결과는 `output/*_metadata.json`으로 남아
-  나중에 스팟체크할 수 있다. 업로드는 자동으로 하지 않고 안내만 출력한다(별도로
-  `youtube_upload.upload_video()` 호출). 완전 자동 모드로 실제 실행해서 검증 완료.
+## 파이프라인 구성
 
-## 계정/키가 있어야 되는 것
-
-- **`script_prompt.py`의 `generate_script()`** — 실제 LLM 호출부. 지금은 `NotImplementedError`를
-  던지도록 되어 있음. 웹(`web/src/app/api/meal-plan/route.ts`)과 동일하게 Gemini(`GEMINI_API_KEY`,
-  my-video-creator와 동일 키)를 직접 호출하도록 구현 예정.
+1. **`script_prompt.py`** — Gemini(`gemini-3.1-flash-lite`, my-video-creator와 동일 키/모델)로
+   대본을 생성한다. 2단계 구조: ①검색 전용 호출로 Google 검색 그라운딩을 통해 사실을 모으고,
+   ②그 사실만 근거로 컴플라이언스 규칙에 맞춰 대본 + 배경사진 검색어(`image_query`)를 작성한다.
+   검색 근거가 하나도 없으면 `UnverifiedContentError`로 자동 차단 — "지어낸 통계"가 나가는 걸
+   막는 최소 안전장치다. (검색+작성을 한 번에 시켰더니 모델이 검색 도구 호출을 자꾸 건너뛰는
+   문제가 있어서, 리서치 전용 호출과 작성 전용 호출로 분리해서 해결했다.)
+2. **`typecast_tts.py`** — Typecast API로 내레이션 생성. 목소리는 **"필재"** —
+   [지식/정보성 콘텐츠에 인기 있는 것으로 확인된 보이스](https://typecast.ai/kr/learn/typecast-piljae-ai-voice-youtube-shorts/).
+   **단어 단위 타임스탬프**까지 받아와서 카라오케 자막에 쓴다. (구버전 `tts.py`는 edge-tts 기반—
+   API 키 없이 동작하는 무료 폴백으로 남겨둠. 문장 단위 타이밍만 지원.)
+3. **`stock_photo.py`** — Pexels API로 대본의 `image_query`에 맞는 배경 사진을 여러 장(기본 3장)
+   검색·다운로드. 무료 API, 상업적 유튜브 영상에도 라이선스 문제 없음(Pexels License).
+4. **`compose_video.py`** — 9:16(1080x1920) 숏폼 영상 합성:
+   - 배경: 스톡 사진 여러 장을 구간별로 전환하며 각 구간 켄 번즈 줌인. 사진을 못 구하면
+     numpy로 생성한 그라데이션+숨쉬는 글로우 배경으로 자동 폴백.
+   - 자막: **단어 단위 카라오케 하이라이트** (말하는 단어가 포인트 컬러로 강조됨), 반투명 패널.
+   - 폰트: 제목/자막은 **Black Han Sans**(굵고 임팩트 있는 무료 한글 폰트), 브랜드 워드마크는
+     나눔고딕. 둘 다 오픈소스 폰트를 리포에 직접 번들(`assets/fonts/`) — 외부 이미지·영상·음원
+     소재 없이 전부 절차적으로 생성해서 라이선스 걱정이 없다.
+   - 사운드: 자막 줄 시작마다 절차적으로 합성한 "pop" 효과음 + 낮은 볼륨 앰비언트 패드.
+   - ImageMagick 의존성을 피하려고 MoviePy `TextClip` 대신 PIL로 텍스트를 직접 렌더링했고,
+     MoviePy 1.0.3의 내장 `.resize()`가 최신 Pillow(10+)에서 깨지는 버그(`Image.ANTIALIAS` 제거됨)를
+     피하려고 켄 번즈 줌도 직접 프레임 생성으로 구현했다.
+5. **`pipeline.py`** — 위 전부를 이어붙이는 엔드투엔드 스크립트. 자동 컴플라이언스 점검(금지어
+   스캔) 위반 시 영상을 만들지 않고 자동 스킵. 모든 결과는 `output/*_metadata.json`으로 남아
+   나중에 스팟체크 가능. 업로드는 자동으로 하지 않고 안내만 출력.
 
 ## 완료된 것 (채널/인증)
 
@@ -42,16 +41,22 @@
 - **Google Cloud 프로젝트**: `hankki-video`, YouTube Data API v3 활성화됨
 - **OAuth 클라이언트**: 데스크톱 앱 타입, `client_secret.json`으로 로컬에 저장(gitignore 처리)
 - **`credentials.json`**: `generate_credentials.py`로 1회 인증 완료, `youtube.upload` +
-  `youtube.force-ssl` 스코프 보유. `get_authenticated_service()`로 채널 정보 조회까지 테스트 완료.
+  `youtube.force-ssl` 스코프 보유. 첫 테스트 업로드(비공개, video_id `4DgousvWne0`) 완료.
 - OAuth 앱은 아직 **"테스트" 상태** — silvernatural2@gmail.com이 테스트 사용자로 등록되어 있어
-  본인 계정으로는 계속 사용 가능. 채널 소유자가 아닌 다른 사람이 관리자로 필요해지면 그때
-  테스트 사용자를 추가하거나 앱을 정식 게시해야 함.
+  본인 계정으로는 계속 사용 가능.
+
+## 환경변수 (`.env`, gitignore 처리됨)
+
+```
+GEMINI_API_KEY=...       # my-video-creator(VocaMate)와 동일 키 재사용
+PEXELS_API_KEY=...       # silvernatural2@gmail.com 계정으로 발급
+TYPECAST_API_KEY=...     # my-video-creator(VocaMate)와 동일 키 재사용
+```
 
 ## 아직 만들지 않은 것
 
-- 실제 스톡 배경 영상/이미지, 라이선스 있는 진짜 BGM — 지금은 절차적으로 생성한 그라데이션/
-  효과음으로 대체되어 있음. 더 다듬고 싶으면 `compose_video.py`의 색상/글로우 파라미터를
-  조정하거나, 배경 레이어 자리에 실제 영상 소재를 끼워넣으면 됨.
+- 실제 라이선스 있는 BGM(지금은 절차적으로 합성한 효과음/패드로 대체)
+- 첫 실제 **공개** 업로드 (지금까지는 비공개 테스트 업로드만 진행)
 
 ## 실행 방법
 
@@ -60,5 +65,5 @@ python pipeline.py "주제" "콘텐츠 클러스터"
 # 예: python pipeline.py "물은 하루에 얼마나 마셔야 할까?" "영양 기초"
 ```
 
-대본이 나오면 터미널에 표시되고, 자동 컴플라이언스 점검 결과와 함께 진행 여부를 물어본다.
-`y`를 입력하면 `output/` 폴더에 mp3(내레이션)와 mp4(완성 영상)가 생성된다.
+사람 확인 없이 대본 생성부터 mp4 완성까지 자동으로 끝난다. `output/` 폴더에 mp3(내레이션),
+mp4(완성 영상), metadata.json(대본/출처/검색 근거 — 나중에 스팟체크용)이 생성된다.
