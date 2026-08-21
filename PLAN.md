@@ -3,7 +3,7 @@
 > 이 파일은 진행상황 추적용입니다. 작업을 끝낼 때마다 `[ ]`를 `[x]`로 바꾸고, 맨 위 **진행률**을 갱신하세요.
 > 새 세션(다음날 등)에서 작업을 이어갈 때는 이 파일을 먼저 읽고 미완료(`[ ]`) 항목부터 이어서 진행하면 됩니다.
 
-**진행률: 15 / 26 (58%)**
+**진행률: 16 / 26 (62%)**
 
 ## 사용자 확인이 필요해서 멈춘 항목
 - ~~채널명~~ → **확정: 한끼정답 (영문/기술명: Hankki)**
@@ -31,6 +31,7 @@
 - Supabase: VocaMate와 **다른 계정(다른 이메일)** — 무료 프로젝트 2개 한도가 계정 단위라서
 - Vercel: 수익화(구독/광고/제휴링크) 시작 전까지 Hobby 무료로 개발, 정식 오픈 시 Pro($20/월)로 전환 필요 (Hobby는 상업적 이용 금지 약관). 계정: silvernatural2@gmail.com, 팀명 "Hankki", 프로젝트명 "hankki" → https://hankki-nine.vercel.app
 - 콘텐츠 표현 원칙: "치료/진단/주치의"급 문구 금지, 일반 정보 제공으로 포지셔닝 (의료법·건강기능식품법 리스크 회피)
+- AI 식단 생성: Vercel AI Gateway가 아니라 **Google Gemini 직접 호출**(`@ai-sdk/google`) 사용. GEMINI_API_KEY는 my-video-creator(VocaMate)와 **동일한 프로덕션 키를 재사용** (GCS `my-video-shorts-bucket/configs/config.json`에서 확인, 사용자가 명시적으로 재사용 결정 — 트래픽 늘면 VocaMate와 쿼터 경쟁 가능성 있음, 필요시 분리 키로 전환)
 
 ---
 
@@ -47,7 +48,7 @@
 - [x] Supabase 연동 (DB 스키마: 사용자, 온보딩 응답, 식단 결과) → `supabase/migrations/0001_init.sql` (profiles, onboarding_submissions, RLS 정책) 적용 완료. `web/src/lib/supabase/client.ts` 클라이언트 작성, 실제 배포 사이트에서 온보딩 퀴즈 → 저장까지 브라우저로 테스트 완료
 - [x] 홈 즉시체험 위젯 (나이/성별/활동량 입력 → 즉시 식단 미리보기) → `web/src/components/instant-widget.tsx`, BMR/TDEE 계산은 `web/src/lib/nutrition.ts`
 - [x] 온보딩 퍼스널라이제이션 퀴즈 (6문항) 구현 → `web/src/components/onboarding/onboarding-quiz.tsx`, 결과 화면에서 이메일(선택) + Supabase 저장까지 연결됨
-- [ ] AI 맞춤 식단 생성 로직 (Vercel AI Gateway 연동) — 계정은 준비됐음, 아직 미착수
+- [x] AI 맞춤 식단 생성 로직 → `web/src/app/api/meal-plan/route.ts` + `web/src/lib/meal-plan.ts`. Vercel AI Gateway 대신 **Gemini(gemini-3.1-flash-lite) 직접 호출**로 변경 (my-video-creator와 동일한 GEMINI_API_KEY 재사용, 사용자 확인 완료). 로컬 + 배포 사이트 모두 브라우저로 끝까지 테스트 완료 (알레르기 제외, 칼로리 근사, 식단유형 반영 확인)
 - [x] 결과 리포트 화면 + 프리미엄 CTA → 온보딩 완료 시 리포트 화면 표시, 프리미엄 버튼은 결제 연동 전까지 비활성 상태
 - [x] 개인정보처리방침/약관 페이지 (건강 민감정보 동의 포함) → `web/src/app/privacy`, `web/src/app/terms` (초안, 법률 자문 전 공개 금지)
 
