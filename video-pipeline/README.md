@@ -15,8 +15,14 @@
   `assets/fonts/NanumGothic.ttf`, 오픈소스 폰트를 리포에 번들). `python compose_video.py`로 직접
   실행하면 `samples/sample_short.mp4` 생성됨 — 실제 mp4 출력, 프레임 캡처로 렌더링 확인 완료.
   아직 배경 이미지/영상 소재나 효과음은 없음 (단색 배경 + 텍스트만 있는 최소 버전).
-- **`script_prompt.py`** — 대본 생성용 시스템 프롬프트 + JSON 출력 스키마.
-  `COMPLIANCE_COPY_GUIDE.md`의 금지 표현/필수 고지 규칙이 프롬프트에 고정 삽입되어 있음.
+- **`script_prompt.py`** — Gemini(`gemini-3.1-flash-lite`, my-video-creator와 동일 키/모델)를 직접
+  호출해 대본을 생성한다. `COMPLIANCE_COPY_GUIDE.md`의 금지 표현/필수 고지 규칙이 시스템 프롬프트에
+  고정 삽입되어 있고, `response_json_schema`로 출력 형식을 강제한다. 실제 호출 테스트 완료 —
+  알레르기·질병 단정 없이, 출처 인용과 필수 고지 문구까지 포함된 대본이 생성됨.
+- **`pipeline.py`** — 대본 생성 → 자동 컴플라이언스 점검(금지어 스캔) → **사람 검수(터미널에서 대본을
+  보여주고 y/N 확인)** → 음성/자막 생성 → 영상 합성까지 이어지는 엔드투엔드 스크립트.
+  `python pipeline.py "주제" "클러스터"`로 실행. 업로드는 자동으로 하지 않고 안내만 출력한다
+  (업로드는 별도로 `youtube_upload.upload_video()` 호출). 실제로 3편 생성해서 검증 완료.
 
 ## 계정/키가 있어야 되는 것
 
@@ -40,11 +46,14 @@
 - 배경 이미지/영상 소재, 효과음, BGM — 지금은 단색 배경 + 텍스트만 있는 최소 버전 (기능 검증 목적).
   비주얼을 더 다듬고 싶으면 `compose_video.py`의 `BG_COLOR`/폰트 크기 등을 조정하거나 배경 레이어를
   추가하면 됨.
-- 사람 검수 단계의 실제 워크플로(현재는 프로세스만 `PLAN.md`에 정의됨, 툴링은 미구현)
+- 첫 실제 YouTube 업로드 (파이프라인/인증 모두 준비 끝났고, 업로드 함수만 호출하면 됨)
 
-## 남은 실행 순서
+## 실행 방법
 
-1. `script_prompt.generate_script()`에 Gemini 호출 구현
-2. `tts.generate_narration_with_captions_sync()` → `compose_video.compose_short()`로 이어붙이는
-   엔드투엔드 스크립트 작성 (지금은 각 모듈을 따로 실행해서 검증한 상태)
-3. `youtube_upload.upload_video()`로 첫 테스트 업로드 (`credentials.json`은 이미 준비됨)
+```
+python pipeline.py "주제" "콘텐츠 클러스터"
+# 예: python pipeline.py "물은 하루에 얼마나 마셔야 할까?" "영양 기초"
+```
+
+대본이 나오면 터미널에 표시되고, 자동 컴플라이언스 점검 결과와 함께 진행 여부를 물어본다.
+`y`를 입력하면 `output/` 폴더에 mp3(내레이션)와 mp4(완성 영상)가 생성된다.

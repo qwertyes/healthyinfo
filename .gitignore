@@ -19,5 +19,9 @@ credentials.json
 
 # generated media samples
 video-pipeline/samples/
+video-pipeline/output/
 *.mp3
 *.mp4
+
+# Claude Code local state
+.claude/

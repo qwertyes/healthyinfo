@@ -2,12 +2,29 @@
 건강정보 숏폼 대본 생성 프롬프트.
 COMPLIANCE_COPY_GUIDE.md의 가드레일을 시스템 프롬프트에 고정 삽입한다.
 
-실제 LLM 호출(Gemini 등)은 Vercel/Supabase 계정 및 API 키가 준비된 뒤 연결한다.
-지금은 프롬프트 템플릿과 출력 스키마만 정의해 둔다 — Phase 2의 "사람 검수" 단계에서
-이 스키마의 script/source/disclaimer 필드를 검수자가 그대로 확인할 수 있게 설계했다.
+LLM 호출은 Gemini를 직접 사용한다 (web/src/app/api/meal-plan/route.ts와 동일한 GEMINI_API_KEY,
+my-video-creator/test_gemini_api.py와 동일한 google-genai 클라이언트 패턴).
 """
 
+import json
+import os
 from dataclasses import dataclass
+
+import google.genai as genai
+from google.genai import types as genai_types
+
+MODEL_NAME = "gemini-3.1-flash-lite"  # my-video-creator와 동일한 저비용 티어
+
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "script": {"type": "string"},
+        "source": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["title", "script", "source", "tags"],
+}
 
 SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏폼 대본 작가입니다.
 아래 규칙을 반드시 지키세요 (위반 시 콘텐츠가 발행되지 않습니다):
@@ -47,18 +64,26 @@ def build_user_prompt(request: ScriptRequest) -> str:
 
 
 def generate_script(request: ScriptRequest) -> dict:
-    """
-    실제 LLM 호출부. Vercel AI Gateway API 키가 설정되면 여기서 모델을 호출하도록 구현한다.
-    지금은 계정/키가 없어 연결하지 않은 상태 — 호출 시 명시적으로 실패한다.
-    """
-    raise NotImplementedError(
-        "LLM API가 아직 연결되지 않았습니다. Vercel AI Gateway API 키 설정 후 "
-        "이 함수 안에서 SYSTEM_PROMPT + build_user_prompt(request)로 모델을 호출하도록 구현하세요."
+    """Gemini를 호출해 대본을 생성한다. 반환값은 RESPONSE_SCHEMA를 따르는 dict."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("환경변수 GEMINI_API_KEY가 설정되어 있지 않습니다.")
+
+    client = genai.Client(api_key=api_key)
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=build_user_prompt(request),
+        config=genai_types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            response_json_schema=RESPONSE_SCHEMA,
+            temperature=0.8,
+        ),
     )
+    return json.loads(response.text)
 
 
 if __name__ == "__main__":
     sample = ScriptRequest(topic="단백질은 하루에 얼마나 먹어야 할까?", cluster="영양 기초")
-    print(SYSTEM_PROMPT)
-    print("\n---\n")
-    print(build_user_prompt(sample))
+    result = generate_script(sample)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
