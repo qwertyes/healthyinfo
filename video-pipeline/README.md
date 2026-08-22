@@ -69,6 +69,11 @@
      활성화를 미루는 것으로 추정 — 반면 unlisted로 올리면 거의 즉시 성공). 그래서
      `final_privacy='private'`일 때만 일단 unlisted로 올려서 댓글을 확실히 단 다음 private로
      전환한다.
+   - **`_publish_article(...)`**: 업로드가 성공하면 같은 대본을 그대로 웹사이트 아티클
+     (`web/content/articles/{date_tag}.json`)로도 재사용해서 자동 git add/commit/push까지
+     한다 — 콘텐츠를 두 번 안 만들고도 "영상=아티클 1:1 매칭"을 달성. 실패해도(네트워크 등)
+     이미 끝난 영상 업로드는 롤백하지 않고 로그만 남긴다. 웹 쪽 소비는
+     `web/src/lib/articles.ts` + `web/src/app/magazine/`.
 7. **`daily_auto_run.py`** — WSL cron으로 매일 실행되는 완전 무인 진입점. `pipeline.run_and_upload()`
    하나만 호출한다. 캘린더가 비었거나 컴플라이언스/수치 검증에 걸려 영상이 안 만들어져도
    프로세스가 죽지 않고 로그만 남긴다.

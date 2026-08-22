@@ -18,6 +18,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -29,6 +30,8 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+REPO_ROOT = os.path.dirname(BASE_DIR)
+ARTICLES_DIR = os.path.join(REPO_ROOT, "web", "content", "articles")
 
 import topic_calendar
 from compose_video import compose_short
@@ -194,15 +197,15 @@ def build_description(result: GeneratedScript) -> str:
 
 def _generate_and_compose(
     topic: str | None, cluster: str | None, voice_id: str
-) -> tuple[str | None, GeneratedScript | None]:
-    """대본 생성부터 mp4 합성까지. 차단되거나 캘린더가 비어있으면 (None, None)을 반환한다."""
+) -> tuple[str | None, GeneratedScript | None, str | None]:
+    """대본 생성부터 mp4 합성까지. 차단되거나 캘린더가 비어있으면 (None, None, None)을 반환한다."""
     upcoming_topic = None
     if topic is None:
         today_item, upcoming_item = topic_calendar.pop_next()
         if not today_item:
             print("⛔ 콘텐츠 캘린더 큐가 비어있습니다. 먼저 채워주세요:")
             print("   python topic_calendar.py")
-            return None, None
+            return None, None, None
         topic = today_item["topic"]
         cluster = today_item["cluster"]
         upcoming_topic = upcoming_item["topic"] if upcoming_item else None
@@ -215,7 +218,7 @@ def _generate_and_compose(
         result = generate_script(ScriptRequest(topic=topic, cluster=cluster, upcoming_topic=upcoming_topic))
     except (UnverifiedContentError, UngroundedStatisticError) as e:
         print(f"⛔ 자동 차단: {e}")
-        return None, None
+        return None, None, None
 
     issues = compliance_check(result.script)
 
@@ -241,7 +244,7 @@ def _generate_and_compose(
         for issue in issues:
             print(f"  - {issue}")
         print(f"(대본 내용은 {metadata_path}에 남겨뒀습니다 — 나중에 확인 가능)")
-        return None, None
+        return None, None, None
 
     print("✅ 자동 점검 통과 — 음성/단어 타이밍 생성 중 (Typecast, 필재 보이스)...")
     audio_path, duration, words = generate_narration_with_words(result.script, audio_path, voice_id=voice_id)
@@ -263,15 +266,64 @@ def _generate_and_compose(
         print(f"📅 다음 편 예고: {result.next_topic_hint} (캘린더 큐에 {remaining}개 남음)")
     else:
         print(f"📌 다음 편 예고(캘린더 미사용): {result.next_topic_hint}")
-    return video_path, result
+    return video_path, result, cluster
 
 
 def run(topic: str | None = None, cluster: str | None = None, voice_id: str = VOICE_PILJAE) -> str | None:
     """영상만 만든다. 업로드는 하지 않는다 (수동으로 검토하고 싶을 때 사용)."""
-    video_path, _ = _generate_and_compose(topic, cluster, voice_id)
+    video_path, _, _ = _generate_and_compose(topic, cluster, voice_id)
     if video_path:
         print("업로드하려면 upload_and_comment()를 별도로 호출하세요 (자동 업로드하지 않습니다).")
     return video_path
+
+
+def _publish_article(
+    video_path: str, result: GeneratedScript, cluster: str, video_id: str, published_at: str
+) -> None:
+    """업로드된 영상의 대본을 그대로 웹사이트 아티클(web/content/articles/*.json)로도 발행한다.
+    두 번 콘텐츠를 만들지 않고 "매거진 콘텐츠와 영상 소재 1:1 매칭"(실행 설계도 Phase 3)을
+    달성하기 위함. 실패해도 영상 업로드 자체는 이미 끝난 상태라 예외를 삼키고 로그만 남긴다
+    (사이트 반영이 하루 늦어지는 건 괜찮지만, 이미 끝난 업로드를 롤백할 이유는 없음)."""
+    try:
+        date_tag = os.path.splitext(os.path.basename(video_path))[0].removesuffix("_short")
+        slug = date_tag.replace("_", "-")
+        os.makedirs(ARTICLES_DIR, exist_ok=True)
+        article_path = os.path.join(ARTICLES_DIR, f"{slug}.json")
+        with open(article_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "slug": slug,
+                    "title": result.title,
+                    "cluster": cluster,
+                    "body": result.script,
+                    "source": result.source,
+                    "tags": result.tags,
+                    "youtubeVideoId": video_id,
+                    "publishedAt": published_at,
+                },
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+
+        rel_path = os.path.relpath(article_path, REPO_ROOT)
+        subprocess.run(["git", "add", rel_path], cwd=REPO_ROOT, check=True)
+        commit = subprocess.run(
+            ["git", "commit", "-m", f"Publish article: {result.title}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if commit.returncode != 0 and "nothing to commit" not in commit.stdout:
+            print(f"⚠️ 아티클 git commit 실패: {commit.stdout}{commit.stderr}")
+            return
+        push = subprocess.run(["git", "push"], cwd=REPO_ROOT, capture_output=True, text=True)
+        if push.returncode != 0:
+            print(f"⚠️ 아티클 git push 실패: {push.stderr}")
+        else:
+            print(f"📰 웹사이트 아티클 발행됨: {rel_path}")
+    except Exception as e:
+        print(f"⚠️ 아티클 발행 중 오류(영상 업로드는 정상 완료됨): {e}")
 
 
 def run_and_upload(
@@ -288,7 +340,7 @@ def run_and_upload(
     유튜브가 자동으로 공개하도록 예약한다 (실행이 이미 오후 7시를 넘겼으면 다음날 오후 7시).
     cron이 새벽에 돌고 실제 시청자가 많은 저녁에 공개하고 싶어서 만든 옵션 — None을 넘기면
     즉시 공개(또는 final_privacy로 지정한 상태)로 바로 올라간다."""
-    video_path, result = _generate_and_compose(topic, cluster, voice_id)
+    video_path, result, resolved_cluster = _generate_and_compose(topic, cluster, voice_id)
     if not video_path or not result:
         return None
 
@@ -307,6 +359,11 @@ def run_and_upload(
         scheduled_publish_at=scheduled_publish_at,
     )
     print(f"업로드 결과: {upload_result}")
+
+    if upload_result and upload_result.get("success"):
+        published_at = scheduled_publish_at or datetime.now(KST).isoformat(timespec="seconds")
+        _publish_article(video_path, result, resolved_cluster or "", upload_result["video_id"], published_at)
+
     return upload_result
 
 

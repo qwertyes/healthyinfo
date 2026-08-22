@@ -51,32 +51,33 @@ export default function Home() {
         <section className="space-y-6">
           <div className="flex items-baseline justify-between gap-4">
             <h2 className="font-heading text-xl tracking-tight">건강정보 콘텐츠</h2>
-            <Link
-              href={YOUTUBE_CHANNEL_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm font-medium text-brand hover:underline"
-            >
-              채널에서 더 보기 →
+            <Link href="/magazine" className="text-sm font-medium text-brand hover:underline">
+              매거진 전체 보기 →
             </Link>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             {CONTENT_HIGHLIGHTS.map((item) => (
               <Link
                 key={item.title}
-                href={YOUTUBE_CHANNEL_URL}
-                target="_blank"
-                rel="noreferrer"
+                href={`/magazine?cluster=${encodeURIComponent(item.title)}`}
                 className="group space-y-2 rounded-xl border p-5 transition-colors hover:border-brand/50 hover:bg-accent"
               >
                 <h3 className="font-heading text-base tracking-tight">{item.title}</h3>
                 <p className="text-sm text-muted-foreground">{item.desc}</p>
                 <span className="inline-block text-sm font-medium text-brand opacity-0 transition-opacity group-hover:opacity-100">
-                  유튜브에서 보기 →
+                  더 읽어보기 →
                 </span>
               </Link>
             ))}
           </div>
+          <Link
+            href={YOUTUBE_CHANNEL_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block text-sm text-muted-foreground hover:text-brand"
+          >
+            유튜브 채널 구독하기 →
+          </Link>
         </section>
       </div>
     </main>
