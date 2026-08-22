@@ -20,6 +20,7 @@ credentials.json
 # generated media samples
 video-pipeline/samples/
 video-pipeline/output/
+video-pipeline/content_queue.json
 *.mp3
 *.mp4
 

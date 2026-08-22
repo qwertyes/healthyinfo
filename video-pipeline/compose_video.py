@@ -48,6 +48,10 @@ PANEL_COLOR = (0, 0, 0, 130)  # 자막 뒤 반투명 패널
 
 KARAOKE_MAX_CHARS = 34  # 문장부호가 없을 때의 안전장치 상한 (대략 2줄 분량)
 
+TITLE_FONT_SIZE = 76  # 요즘 쇼츠 썸네일처럼 상단 고정 제목을 크고 굵게 (기존 60 → 76)
+BRAND_FONT_SIZE = 58  # 채널명 워터마크가 여전히 약하다는 피드백 → 한 번 더 키움 (32 → 46 → 58)
+BRAND_Y = HEIGHT - 340  # 유튜브 자체 UI(계정명·영상 제목·재생바)가 하단 ~90%부터 겹치므로 그 위로
+
 # YouTube Studio 오디오 보관함(공식, 저작자 표시 불필요)에서 받은 실제 라이선스 BGM.
 # "Corporate Mellow Groove" — Doug Maxwell, 설명형/정보성 콘텐츠에 흔히 쓰이는 잔잔한 트랙.
 BGM_PATH = os.path.join(os.path.dirname(__file__), "assets", "music", "corporate_mellow_groove.mp3")
@@ -63,7 +67,12 @@ def _font_regular(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT_REGULAR_PATH, size)
 
 
+TITLE_MIN_BREAK_CHARS = 8  # 이보다 짧은 상태에서 문장부호를 만나면 아직 줄바꿈하지 않는다
+
+
 def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
+    """단어를 너비 안에서 줄바꿈하되, 물음표·마침표·쉼표·느낌표에서 우선 끊는다 —
+    카라오케 자막의 group_words_into_lines와 같은 원칙(너무 짧은 조각은 만들지 않음)."""
     probe = ImageDraw.Draw(Image.new("RGB", (10, 10)))
     words = text.split(" ")
     lines: list[str] = []
@@ -76,6 +85,10 @@ def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> list[
             if current:
                 lines.append(current)
             current = word
+
+        if current.rstrip().endswith(_BREAK_PUNCTUATION) and len(current) >= TITLE_MIN_BREAK_CHARS:
+            lines.append(current)
+            current = ""
     if current:
         lines.append(current)
     return lines
@@ -445,7 +458,7 @@ def compose_short(
         layers.extend(_karaoke_line_clips(line, caption_font_size, caption_max_width))
 
     brand_img = _render_text_brand(brand_label)
-    brand_clip = ImageClip(np.array(brand_img)).set_start(0).set_duration(duration).set_position(("center", HEIGHT - 140))
+    brand_clip = ImageClip(np.array(brand_img)).set_start(0).set_duration(duration).set_position(("center", BRAND_Y))
     layers.append(brand_clip.fx(vfx.fadein, 0.4))
 
     video = CompositeVideoClip(layers, size=(WIDTH, HEIGHT)).set_duration(duration)
@@ -461,31 +474,39 @@ def compose_short(
 
 
 def _render_text_title(text: str) -> Image.Image:
-    font = _font_bold(60)
+    font = _font_bold(TITLE_FONT_SIZE)
     lines = _wrap_text(text, font, WIDTH - 160)
     probe = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
-    line_height = int(60 * 1.35)
+    line_height = int(TITLE_FONT_SIZE * 1.35)
     line_widths = [probe.textlength(line, font=font) for line in lines]
     img_w = max(int(max(line_widths, default=0)), 10) + 20
     img_h = line_height * len(lines) + 20
     img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+    last_i = len(lines) - 1
     for i, line in enumerate(lines):
         x = (img_w - line_widths[i]) / 2
         y = 10 + i * line_height
+        # 마지막 줄(보통 결론/반전 문구)을 포인트 컬러로 강조 — 요즘 쇼츠 썸네일 스타일 참고.
+        color = ACCENT_COLOR if i == last_i else TITLE_COLOR
         draw.text((x + 3, y + 3), line, font=font, fill=(0, 0, 0, 190))
-        draw.text((x, y), line, font=font, fill=(*TITLE_COLOR, 255))
+        draw.text((x, y), line, font=font, fill=(*color, 255))
     return img
 
 
 def _render_text_brand(text: str) -> Image.Image:
-    font = _font_regular(32)
+    """채널명 워터마크. 그냥 텍스트가 아니라 자막과 같은 어두운 배지 패널 위에 큼직하게 얹어서
+    "약하다"는 피드백을 반영해 존재감을 키운다."""
+    font = _font_bold(BRAND_FONT_SIZE)
     probe = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
-    w = int(probe.textlength(text, font=font)) + 20
-    h = int(32 * 1.5) + 10
-    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    text_w = probe.textlength(text, font=font)
+    pad_x, pad_y = 28, 16
+    img_w = int(text_w) + pad_x * 2
+    img_h = int(BRAND_FONT_SIZE * 1.3) + pad_y * 2
+    img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.text((10, 5), text, font=font, fill=(*ACCENT_COLOR, 255))
+    draw.rounded_rectangle([0, 0, img_w, img_h], radius=18, fill=PANEL_COLOR)
+    draw.text((pad_x, pad_y), text, font=font, fill=(*ACCENT_COLOR, 255))
     return img
 
 

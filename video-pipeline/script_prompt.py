@@ -30,8 +30,9 @@ RESPONSE_SCHEMA = {
         "source": {"type": "string"},
         "tags": {"type": "array", "items": {"type": "string"}},
         "image_query": {"type": "string"},
+        "next_topic_hint": {"type": "string"},
     },
-    "required": ["title", "script", "source", "tags", "image_query"],
+    "required": ["title", "script", "source", "tags", "image_query", "next_topic_hint"],
 }
 
 SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏폼 대본 작가입니다.
@@ -59,7 +60,10 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
 5. "OO이 나에게 맞을까?"처럼 개인차가 있는 주제라도, 판단 기준이 되는 구체적 조건을
    제시하세요. 예: "이런 특징이 있다면 적합하고, 이런 경우엔 맞지 않을 수 있다."
 6. 대본의 마지막 문장(필수 고지 문구 바로 앞)에는, 시청자가 다음 영상도 보고 싶어지도록
-   관련된 흥미로운 질문이나 다음에 다룰 만한 소재를 자연스럽게 한 줄 남기세요.
+   관련된 흥미로운 질문이나 다음에 다룰 만한 소재를 자연스럽게 한 줄 남기세요. 이 예고는
+   말뿐인 약속이 아닙니다 — 같은 내용을 "next_topic_hint" 필드에 **검색 가능한 짧은 주제
+   구문**(예: "카페인 섭취와 혈당의 관계")으로도 반드시 적으세요. 이 값이 실제로 다음 영상
+   주제로 쓰입니다.
 
 [컴플라이언스]
 7. 특정 질병의 예방, 치료, 완치를 단정하지 마세요.
@@ -82,7 +86,8 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
   "script": "실제 낭독할 전체 대본 (고지 문구 포함)",
   "source": "실제 검색으로 확인한 출처 (기관/연구명). 일반 상식 수준이라 특정 출처가 없으면 빈 문자열",
   "tags": ["영상 태그", "..."],
-  "image_query": "배경 사진 검색용 영어 키워드"
+  "image_query": "배경 사진 검색용 영어 키워드",
+  "next_topic_hint": "대본 마지막 예고와 일치하는, 다음 영상 검색용 짧은 주제 구문"
 }"""
 
 
@@ -103,6 +108,7 @@ class GeneratedScript:
     source: str
     tags: list[str]
     image_query: str
+    next_topic_hint: str
     grounding_sources: list[dict] = field(default_factory=list)  # [{"title":.., "uri":..}, ...] 실제 검색 근거
 
 
@@ -185,6 +191,7 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
         source=data["source"],
         tags=data["tags"],
         image_query=data["image_query"],
+        next_topic_hint=data["next_topic_hint"],
         grounding_sources=sources,
     )
 
@@ -197,6 +204,7 @@ if __name__ == "__main__":
     print(f"출처(자체 기재): {result.source}")
     print(f"태그: {result.tags}")
     print(f"이미지 검색어: {result.image_query}")
+    print(f"다음 영상 예고 주제: {result.next_topic_hint}")
     print("검색 그라운딩 근거:")
     for s in result.grounding_sources:
         print(f"  - {s['title']}: {s['uri']}")
