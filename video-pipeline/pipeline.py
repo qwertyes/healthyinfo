@@ -52,14 +52,18 @@ BANNED_PATTERNS = [
 ]
 
 REQUIRED_DISCLAIMER = "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
+SITE_URL = "https://hankki-nine.vercel.app"
 
 
-def build_pinned_comment(source: str, next_topic_hint: str) -> str:
+def build_pinned_comment(source: str, next_topic_hint: str, article_url: str | None = None) -> str:
     """업로드 후 등록할 고정 댓글 텍스트를 메타데이터로부터 자동 생성한다 (출처 재확인 +
-    다음 편 예고 + 소통 유도). upload_and_comment()에 넘겨서 실제로 등록한다."""
+    웹사이트 링크 + 다음 편 예고 + 소통 유도). upload_and_comment()에 넘겨서 실제로 등록한다."""
     lines = []
     if source:
         lines.append(f"📎 이 영상의 참고 자료: {source}")
+    if article_url:
+        lines.append(f"📖 이 영상 대본을 글로 다시 보기: {article_url}")
+    lines.append(f"🍽️ 내 맞춤 식단 30초 만에 확인: {SITE_URL}")
     lines.append("영상 어떠셨나요? 궁금하신 점이나 다뤄줬으면 하는 주제는 댓글로 남겨주세요!")
     if next_topic_hint:
         lines.append(f"다음 편 예고: '{next_topic_hint}' 다뤄볼게요 🙂")
@@ -93,6 +97,7 @@ def upload_and_comment(
     category_id: str = "27",
     final_privacy: str = "public",
     scheduled_publish_at: str | None = None,
+    article_url: str | None = None,
 ) -> dict:
     """댓글까지 단 뒤 최종 공개범위로 전환하는 표준 업로드 절차.
 
@@ -109,7 +114,7 @@ def upload_and_comment(
     댓글이 성공한다."""
     from youtube_upload import get_authenticated_service, insert_comment, upload_video
 
-    comment_text = build_pinned_comment(source, next_topic_hint)
+    comment_text = build_pinned_comment(source, next_topic_hint, article_url)
 
     if scheduled_publish_at:
         return upload_video(
@@ -184,12 +189,24 @@ def _save_metadata(path: str, result: GeneratedScript, issues: list[str]) -> Non
         )
 
 
-def build_description(result: GeneratedScript) -> str:
-    """result.script(고지 문구 포함)+출처+해시태그로 업로드 설명란을 자동 생성한다.
-    지금까지 upload_*.py를 만들 때마다 손으로 하던 걸 그대로 코드로 옮긴 것."""
+def slug_from_video_path(video_path: str) -> str:
+    """output/{date_tag}_short.mp4 → 웹사이트 아티클 slug(URL에 그대로 씀).
+    _publish_article()과 build_description()/build_pinned_comment()가 같은 slug를
+    쓰도록 한 곳에 모아둔다."""
+    date_tag = os.path.splitext(os.path.basename(video_path))[0].removesuffix("_short")
+    return date_tag.replace("_", "-")
+
+
+def build_description(result: GeneratedScript, article_url: str | None = None) -> str:
+    """result.script(고지 문구 포함)+출처+웹사이트 링크+해시태그로 업로드 설명란을 자동 생성한다.
+    지금까지 upload_*.py를 만들 때마다 손으로 하던 걸 그대로 코드로 옮긴 것. 실행 설계도
+    Phase 3("영상 설명란에 웹사이트 링크")를 여기서 채운다."""
     parts = [result.script]
     if result.source:
         parts.append(f"출처: {result.source}")
+    parts.append(f"🍽️ 내 맞춤 식단 30초 만에 확인: {SITE_URL}")
+    if article_url:
+        parts.append(f"📖 이 영상 대본 전체 읽기: {article_url}")
     hashtags = " ".join(f"#{tag}" for tag in result.tags) + " #한끼정답"
     parts.append(hashtags)
     return "\n\n".join(parts)
@@ -285,8 +302,7 @@ def _publish_article(
     달성하기 위함. 실패해도 영상 업로드 자체는 이미 끝난 상태라 예외를 삼키고 로그만 남긴다
     (사이트 반영이 하루 늦어지는 건 괜찮지만, 이미 끝난 업로드를 롤백할 이유는 없음)."""
     try:
-        date_tag = os.path.splitext(os.path.basename(video_path))[0].removesuffix("_short")
-        slug = date_tag.replace("_", "-")
+        slug = slug_from_video_path(video_path)
         os.makedirs(ARTICLES_DIR, exist_ok=True)
         article_path = os.path.join(ARTICLES_DIR, f"{slug}.json")
         with open(article_path, "w", encoding="utf-8") as f:
@@ -347,16 +363,21 @@ def run_and_upload(
     if scheduled_publish_at == "AUTO_7PM":
         scheduled_publish_at = next_publish_time_kst(19, 0)
 
+    # _publish_article()이 같은 slug로 실제 파일을 커밋하는 건 업로드 성공 "이후"지만, slug
+    # 자체는 video_path만으로 미리 결정되므로 설명란/댓글에 넣을 URL은 지금 만들어도 된다.
+    article_url = f"{SITE_URL}/magazine/{slug_from_video_path(video_path)}"
+
     print("업로드 중...")
     upload_result = upload_and_comment(
         video_path=video_path,
         title=result.title,
-        description=build_description(result),
+        description=build_description(result, article_url),
         tags=result.tags,
         source=result.source,
         next_topic_hint=result.next_topic_hint,
         final_privacy=final_privacy,
         scheduled_publish_at=scheduled_publish_at,
+        article_url=article_url,
     )
     print(f"업로드 결과: {upload_result}")
 
