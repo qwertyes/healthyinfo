@@ -42,6 +42,20 @@ BANNED_PATTERNS = [
 
 REQUIRED_DISCLAIMER = "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
 
+
+def build_pinned_comment(source: str, next_topic_hint: str) -> str:
+    """업로드 후 등록할 고정 댓글 텍스트를 메타데이터로부터 자동 생성한다 (출처 재확인 +
+    다음 편 예고 + 소통 유도). 업로드 스크립트에서 upload_video(..., comment_text=...)로
+    넘기면 youtube_upload.upload_video()가 자동으로 댓글까지 등록한다."""
+    lines = []
+    if source:
+        lines.append(f"📎 이 영상의 참고 자료: {source}")
+    lines.append("영상 어떠셨나요? 궁금하신 점이나 다뤄줬으면 하는 주제는 댓글로 남겨주세요!")
+    if next_topic_hint:
+        lines.append(f"다음 편 예고: '{next_topic_hint}' 다뤄볼게요 🙂")
+    lines.append(REQUIRED_DISCLAIMER)
+    return "\n\n".join(lines)
+
 # 대본이 "다음 영상 예고"로 남긴 주제를 실제로 이어가기 위한 큐. 영상이 하나 완성될 때마다
 # 그 대본의 next_topic_hint로 덮어써서, 다음 실행이 인자 없이도 그 주제를 이어받게 한다.
 QUEUE_PATH = os.path.join(BASE_DIR, "content_queue.json")

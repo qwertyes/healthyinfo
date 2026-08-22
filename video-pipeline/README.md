@@ -44,6 +44,14 @@
 5. **`pipeline.py`** — 위 전부를 이어붙이는 엔드투엔드 스크립트. 자동 컴플라이언스 점검(금지어
    스캔) 위반 시 영상을 만들지 않고 자동 스킵. 모든 결과는 `output/*_metadata.json`으로 남아
    나중에 스팟체크 가능. 업로드는 자동으로 하지 않고 안내만 출력.
+   - **예고 문구 자동 이어받기**: 대본이 구조화된 `next_topic_hint` 필드로 남긴 "다음 편" 주제를
+     `content_queue.json`에 저장한다. `python pipeline.py`를 **인자 없이** 실행하면 직전 영상이
+     예고한 주제를 자동으로 이어서 진행 — 예고가 그냥 빈말이 되지 않게 하는 장치.
+   - **`build_pinned_comment(source, next_topic_hint)`**: 업로드 시 달 고정 댓글(출처 재확인 +
+     다음 편 예고 + 소통 유도 + 필수 고지 문구)을 메타데이터로부터 자동 생성한다. 업로드
+     스크립트에서 `upload_video(..., comment_text=build_pinned_comment(...))`로 넘기면
+     `youtube_upload.upload_video()`가 업로드 직후 자동으로 댓글까지 등록한다 — 매번 손으로
+     댓글을 새로 쓰지 않아도 됨.
 
 ## 완료된 것 (채널/인증)
 
