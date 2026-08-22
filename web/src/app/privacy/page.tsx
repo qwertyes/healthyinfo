@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "개인정보처리방침 — HealthyInfo",
+  title: "개인정보처리방침 — 한끼정답",
 };
 
 export default function PrivacyPage() {

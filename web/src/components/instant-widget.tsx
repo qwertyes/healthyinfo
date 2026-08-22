@@ -92,7 +92,7 @@ export function InstantWidget() {
             <Label>목표</Label>
             <Select value={goal} onValueChange={(v) => setGoal(v as Goal)}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>{(v: Goal) => GOAL_LABEL[v]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {GOAL_OPTIONS.map(([value, label]) => (
@@ -108,7 +108,7 @@ export function InstantWidget() {
             <Label>활동량</Label>
             <Select value={activity} onValueChange={(v) => setActivity(v as ActivityLevel)}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>{(v: ActivityLevel) => ACTIVITY_LABEL[v]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ACTIVITY_OPTIONS.map(([value, label]) => (

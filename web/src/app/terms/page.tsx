@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "이용약관 — HealthyInfo",
+  title: "이용약관 — 한끼정답",
 };
 
 export default function TermsPage() {
