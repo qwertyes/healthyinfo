@@ -12,6 +12,7 @@ my-video-creator/test_gemini_api.py와 동일한 google-genai 클라이언트 �
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 
 import google.genai as genai
@@ -52,6 +53,10 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
 3. 제공된 사실 중 신뢰할 만한 게 없다면, 자극적인 수치를 억지로 만들어내지 말고 일반적으로
    잘 알려진 상식 수준의 정보로 대본을 구성하세요 — 이런 공개된 일반 정보도 시청자에게는
    충분히 의미 있는 정보입니다.
+3-1. **퍼센트·수치는 "검색으로 확인된 사실"에 그 숫자가 글자 그대로 적혀 있을 때만** 쓰세요.
+   비슷한 통계(예: 상대위험도, 표준화 평균차 같은 다른 지표)를 퍼센트로 환산하거나, 어림짐작해서
+   "14~37%"처럼 그럴듯한 범위를 새로 만들어내는 것도 금지된 지어내기입니다. 정확한 숫자가 없으면
+   "인슐린 민감도가 일시적으로 낮아질 수 있다"처럼 숫자 없이 정성적으로만 표현하세요.
 
 [정보 밀도]
 4. 반드시 구체적인 사실을 1~2개 이상 포함하세요 (숫자, 비교, 방법 이름, 조건 등 — 단, 위 사실
@@ -93,6 +98,25 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
 
 class UnverifiedContentError(Exception):
     """모델이 검색 그라운딩 없이(=사실 확인 없이) 답변한 경우 발생 — 사람 검수가 없으므로 자동 차단한다."""
+
+
+class UngroundedStatisticError(Exception):
+    """대본에 등장하는 퍼센트 수치가 검색 근거 텍스트 어디에도 그대로 없는 경우 발생.
+    실제 사례: "카페인이 인슐린 민감도를 14~37% 낮춘다"처럼, 방향성은 검색 근거와 맞지만
+    구체적인 숫자는 모델이 그럴듯하게 지어낸 경우가 있었다 — 검색 근거가 존재하는지만
+    확인하는 UnverifiedContentError로는 못 잡는 케이스라 별도로 검사한다."""
+
+
+_PERCENT_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:%|퍼센트)")
+
+
+def _find_ungrounded_percentages(script_text: str, facts_text: str) -> list[str]:
+    facts_compact = facts_text.replace(" ", "")
+    found = []
+    for match in _PERCENT_PATTERN.findall(script_text):
+        if match.replace(" ", "") not in facts_compact:
+            found.append(match)
+    return found
 
 
 @dataclass
@@ -185,6 +209,14 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
     )
 
     data = json.loads(response.text)
+
+    ungrounded_percentages = _find_ungrounded_percentages(data["script"], facts_text)
+    if ungrounded_percentages:
+        raise UngroundedStatisticError(
+            f"'{request.topic}' 대본에 검색 근거에 없는 수치가 있습니다: {ungrounded_percentages} — "
+            "방향성은 맞아도 구체적인 숫자를 지어냈을 수 있어 자동으로 차단합니다."
+        )
+
     return GeneratedScript(
         title=data["title"],
         script=data["script"],

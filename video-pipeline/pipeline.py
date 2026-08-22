@@ -19,6 +19,7 @@
 import json
 import os
 import sys
+import time
 from datetime import datetime
 
 # Windows 콘솔 기본 코드페이지(cp949)가 이모지(⛔✅)를 못 그려서 print()가 죽는 문제 방지.
@@ -30,7 +31,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 from compose_video import compose_short
-from script_prompt import GeneratedScript, ScriptRequest, UnverifiedContentError, generate_script
+from script_prompt import (
+    GeneratedScript,
+    ScriptRequest,
+    UngroundedStatisticError,
+    UnverifiedContentError,
+    generate_script,
+)
 from stock_photo import search_photos
 from typecast_tts import VOICE_PILJAE, generate_narration_with_words
 
@@ -45,8 +52,7 @@ REQUIRED_DISCLAIMER = "이 정보는 일반적인 영양 정보이며, 의학적
 
 def build_pinned_comment(source: str, next_topic_hint: str) -> str:
     """업로드 후 등록할 고정 댓글 텍스트를 메타데이터로부터 자동 생성한다 (출처 재확인 +
-    다음 편 예고 + 소통 유도). 업로드 스크립트에서 upload_video(..., comment_text=...)로
-    넘기면 youtube_upload.upload_video()가 자동으로 댓글까지 등록한다."""
+    다음 편 예고 + 소통 유도). upload_and_comment()에 넘겨서 실제로 등록한다."""
     lines = []
     if source:
         lines.append(f"📎 이 영상의 참고 자료: {source}")
@@ -55,6 +61,54 @@ def build_pinned_comment(source: str, next_topic_hint: str) -> str:
         lines.append(f"다음 편 예고: '{next_topic_hint}' 다뤄볼게요 🙂")
     lines.append(REQUIRED_DISCLAIMER)
     return "\n\n".join(lines)
+
+
+def upload_and_comment(
+    video_path: str,
+    title: str,
+    description: str,
+    tags: list[str],
+    source: str,
+    next_topic_hint: str,
+    credentials_file: str = "credentials.json",
+    category_id: str = "27",
+    final_privacy: str = "private",
+) -> dict:
+    """비공개 영상에 고정 댓글을 안정적으로 다는 표준 업로드 절차.
+
+    실제로 겪은 문제: privacy_status='private'로 바로 올린 영상은 commentThreads.insert가
+    몇 분~20분 넘게 기다려도 403 Forbidden으로 실패하는 경우가 있었다 (유튜브가 완전 비공개
+    영상은 댓글 기능 활성화를 미루는 것으로 추정). 반면 잠깐 '일부공개(unlisted)'로 올리면
+    거의 즉시(약 10초) 댓글이 성공했다 — my-video-creator/english_words_short.py가 예약 발행
+    시 굳이 unlisted로 먼저 올렸다가 나중에 private로 바꾸는 것도 같은 이유로 보인다.
+    그래서 최종적으로 private로 남기고 싶어도, 일단 unlisted로 올려서 댓글을 확실히 단 다음
+    private로 전환한다."""
+    from youtube_upload import get_authenticated_service, insert_comment, upload_video
+
+    upload_status = "unlisted" if final_privacy == "private" else final_privacy
+    result = upload_video(
+        file_path=video_path,
+        title=title,
+        description=description,
+        tags=tags,
+        privacy_status=upload_status,
+        credentials_file=credentials_file,
+        category_id=category_id,
+    )
+    if not result.get("success"):
+        return result
+
+    video_id = result["video_id"]
+    youtube = get_authenticated_service(credentials_file=credentials_file)
+    time.sleep(10)
+    comment_id = insert_comment(youtube, video_id, build_pinned_comment(source, next_topic_hint))
+
+    if final_privacy != upload_status:
+        youtube.videos().update(
+            part="status", body={"id": video_id, "status": {"privacyStatus": final_privacy}}
+        ).execute()
+
+    return {"success": True, "video_id": video_id, "comment_id": comment_id}
 
 # 대본이 "다음 영상 예고"로 남긴 주제를 실제로 이어가기 위한 큐. 영상이 하나 완성될 때마다
 # 그 대본의 next_topic_hint로 덮어써서, 다음 실행이 인자 없이도 그 주제를 이어받게 한다.
@@ -134,7 +188,7 @@ def run(topic: str | None = None, cluster: str | None = None, voice_id: str = VO
     print(f"대본 생성 중... (주제: {topic})")
     try:
         result = generate_script(ScriptRequest(topic=topic, cluster=cluster))
-    except UnverifiedContentError as e:
+    except (UnverifiedContentError, UngroundedStatisticError) as e:
         print(f"⛔ 자동 차단: {e}")
         return None
 

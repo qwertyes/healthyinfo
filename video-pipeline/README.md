@@ -47,11 +47,15 @@
    - **예고 문구 자동 이어받기**: 대본이 구조화된 `next_topic_hint` 필드로 남긴 "다음 편" 주제를
      `content_queue.json`에 저장한다. `python pipeline.py`를 **인자 없이** 실행하면 직전 영상이
      예고한 주제를 자동으로 이어서 진행 — 예고가 그냥 빈말이 되지 않게 하는 장치.
-   - **`build_pinned_comment(source, next_topic_hint)`**: 업로드 시 달 고정 댓글(출처 재확인 +
-     다음 편 예고 + 소통 유도 + 필수 고지 문구)을 메타데이터로부터 자동 생성한다. 업로드
-     스크립트에서 `upload_video(..., comment_text=build_pinned_comment(...))`로 넘기면
-     `youtube_upload.upload_video()`가 업로드 직후 자동으로 댓글까지 등록한다 — 매번 손으로
-     댓글을 새로 쓰지 않아도 됨.
+   - **`build_pinned_comment(source, next_topic_hint)` / `upload_and_comment(...)`**: 업로드 시
+     달 고정 댓글(출처 재확인 + 다음 편 예고 + 소통 유도 + 필수 고지 문구)을 메타데이터로부터
+     자동 생성하고 등록한다. **주의**: `privacy_status='private'`로 바로 올린 영상은
+     `commentThreads.insert`가 몇 분~20분 넘게 기다려도 403으로 실패하는 걸 실제로 겪었다
+     (유튜브가 완전 비공개 영상은 댓글 기능 활성화를 미루는 것으로 추정 — 반면 '일부공개
+     (unlisted)'로 올리면 거의 즉시 성공). 그래서 `upload_and_comment()`는 최종적으로 private로
+     남기고 싶어도 **일단 unlisted로 올려서 댓글을 확실히 단 다음 private로 전환**하는 절차를
+     쓴다 (`my-video-creator/english_words_short.py`가 예약 발행 때 굳이 unlisted를 거치는 것도
+     같은 이유로 보임). 앞으로 업로드할 땐 `upload_video()`를 직접 쓰지 말고 이 함수를 쓸 것.
 
 ## 완료된 것 (채널/인증)
 
