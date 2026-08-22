@@ -2,27 +2,23 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { DIET_TYPE_LABEL, type QuizAnswers } from "@/lib/quiz";
 import { GOAL_LABEL, type NutritionResult } from "@/lib/nutrition";
-import type { MealPlan } from "@/lib/meal-plan";
-
-const SLOT_LABEL: Record<MealPlan["meals"][number]["slot"], string> = {
-  breakfast: "아침",
-  lunch: "점심",
-  dinner: "저녁",
-  snack: "간식",
-};
+import type { Meal, MealPlan } from "@/lib/meal-plan";
+import { MealPlanDisplay } from "@/components/onboarding/meal-plan-display";
 
 export function MealPlanPanel({
   answers,
   result,
+  onPlanGenerated,
 }: {
   answers: QuizAnswers;
   result: NutritionResult;
+  onPlanGenerated?: (plan: MealPlan) => void;
 }) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [plan, setPlan] = useState<MealPlan | null>(null);
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
 
   async function generate() {
     setState("loading");
@@ -45,8 +41,44 @@ export function MealPlanPanel({
       const data = (await res.json()) as MealPlan;
       setPlan(data);
       setState("done");
+      onPlanGenerated?.(data);
     } catch {
       setState("error");
+    }
+  }
+
+  async function regenerateMeal(index: number) {
+    if (!plan) return;
+    const target = plan.meals[index];
+    setRegeneratingIndex(index);
+    try {
+      const res = await fetch("/api/meal-plan/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goal: GOAL_LABEL[answers.goal],
+          dietType: DIET_TYPE_LABEL[answers.dietType],
+          allergies: answers.allergies,
+          cookingTime: answers.cookingTime,
+          targetCalories: result.targetCalories,
+          proteinG: result.proteinG,
+          fatG: result.fatG,
+          carbG: result.carbG,
+          slot: target.slot,
+          targetMealCalories: target.estimatedCalories,
+          exclude: plan.meals.map((m) => m.menu),
+        }),
+      });
+      if (!res.ok) throw new Error("failed");
+      const newMeal = (await res.json()) as Meal;
+      const nextMeals = plan.meals.map((m, i) => (i === index ? { ...newMeal, slot: target.slot } : m));
+      const nextPlan = { ...plan, meals: nextMeals };
+      setPlan(nextPlan);
+      onPlanGenerated?.(nextPlan);
+    } catch {
+      // 실패해도 기존 메뉴는 그대로 둔다 — 조용히 무시하지 않고 버튼 상태만 원복.
+    } finally {
+      setRegeneratingIndex(null);
     }
   }
 
@@ -74,29 +106,6 @@ export function MealPlanPanel({
   if (!plan) return null;
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-medium">{plan.summary}</p>
-      <div className="space-y-2">
-        {plan.meals.map((meal, i) => (
-          <div key={i} className="rounded-lg border p-3 space-y-1">
-            <div className="flex items-center justify-between">
-              <Badge variant="secondary">{SLOT_LABEL[meal.slot]}</Badge>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                약 {meal.estimatedCalories}kcal
-              </span>
-            </div>
-            <p className="text-sm font-medium">{meal.menu}</p>
-            <p className="text-xs text-muted-foreground">{meal.items.join(" · ")}</p>
-          </div>
-        ))}
-      </div>
-      {plan.tips.length > 0 && (
-        <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-          {plan.tips.map((tip, i) => (
-            <li key={i}>{tip}</li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <MealPlanDisplay plan={plan} onRegenerate={regenerateMeal} regeneratingIndex={regeneratingIndex} />
   );
 }

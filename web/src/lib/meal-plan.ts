@@ -1,16 +1,18 @@
 import { z } from "zod";
 
+export const MealSchema = z.object({
+  slot: z.enum(["breakfast", "lunch", "dinner", "snack"]).describe("끼니 구분"),
+  menu: z.string().describe("메뉴 이름"),
+  items: z.array(z.string()).describe("구성 음식/재료 목록"),
+  estimatedCalories: z.number().describe("이 끼니의 예상 칼로리(kcal)"),
+});
+
+export type Meal = z.infer<typeof MealSchema>;
+
 export const MealPlanSchema = z.object({
   summary: z.string().describe("이 식단의 한 줄 요약 (예: 저탄고지 기반 체중 감량 식단)"),
   meals: z
-    .array(
-      z.object({
-        slot: z.enum(["breakfast", "lunch", "dinner", "snack"]).describe("끼니 구분"),
-        menu: z.string().describe("메뉴 이름"),
-        items: z.array(z.string()).describe("구성 음식/재료 목록"),
-        estimatedCalories: z.number().describe("이 끼니의 예상 칼로리(kcal)"),
-      }),
-    )
+    .array(MealSchema)
     .min(2)
     .max(5)
     .describe("하루 식단 구성. 간헐적 단식이면 끼니 수를 줄이는 등 diet_type을 반영"),
@@ -57,4 +59,34 @@ export function buildMealPlanPrompt(input: MealPlanRequestInput): string {
     "",
     "위 조건에 맞는 하루 식단을 추천해줘.",
   ].join("\n");
+}
+
+const SLOT_KOREAN: Record<Meal["slot"], string> = {
+  breakfast: "아침",
+  lunch: "점심",
+  dinner: "저녁",
+  snack: "간식",
+};
+
+export interface RegenerateMealInput extends MealPlanRequestInput {
+  slot: Meal["slot"];
+  targetMealCalories: number;
+  exclude: string[];
+}
+
+export function buildRegenerateMealPrompt(input: RegenerateMealInput): string {
+  return [
+    `목표: ${input.goal}`,
+    `선호 식단 유형: ${input.dietType}`,
+    `알레르기/제외 음식: ${input.allergies.length > 0 ? input.allergies.join(", ") : "없음"}`,
+    `요리 가능 시간: ${input.cookingTime}`,
+    `이 끼니(${SLOT_KOREAN[input.slot]})의 목표 칼로리: 약 ${input.targetMealCalories}kcal`,
+    input.exclude.length > 0
+      ? `이미 제안했던 메뉴라 이번엔 피해야 할 메뉴: ${input.exclude.join(", ")}`
+      : "",
+    "",
+    `위 조건에 맞는 "${SLOT_KOREAN[input.slot]}" 메뉴 하나만 새로 추천해줘. 방금 제외 목록에 있는 것과는 다른 메뉴여야 해.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

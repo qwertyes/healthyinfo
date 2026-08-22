@@ -11,6 +11,11 @@
 - ~~Supabase 계정 생성~~ → **완료** (silvernatural2@gmail.com, 프로젝트 hankki, Seoul 리전)
 - ~~Vercel 계정/프로젝트 생성~~ → **완료, 배포됨: https://hankki-nine.vercel.app**
 - ~~새 YouTube 채널 + Google Cloud OAuth 클라이언트 발급~~ → **완료** (silvernatural2@gmail.com, 채널명 "한끼정답", GCP 프로젝트 "hankki-video", `video-pipeline/credentials.json` 발급 및 API 호출 테스트 완료)
+- **[ ] Supabase 마이그레이션 `0002_meal_plan_and_shareable_link.sql` 미실행** (2026-08-23) — Claude는
+  service_role 키가 없어서(의도적으로 안 줌) 직접 실행 불가. **사용자가 Supabase SQL Editor에
+  붙여넣어 실행해야** "결과 저장하기" → `/plan/[id]` 재조회 기능이 실제로 동작함. 그 전까지는
+  저장 버튼을 눌러도 "저장에 실패했습니다" 에러가 뜨는 게 정상(컬럼이 없어서) — 코드 자체는
+  이미 배포되어 있고 이 SQL만 실행하면 바로 살아남.
 → 사용자 확인이 필요한 항목은 모두 끝났습니다. 이제부터는 계정/인프라가 아니라 실제 콘텐츠 제작(영상 템플릿, 대본, 업로드) 작업입니다.
 
 ## 완료 — 영상 퀄리티 개선 (2026-08-21)
@@ -200,6 +205,26 @@ v2를 실제로 보고도 "너무 단조롭다"는 피드백을 받아, 인기 �
 - [x] AI 맞춤 식단 생성 로직 → `web/src/app/api/meal-plan/route.ts` + `web/src/lib/meal-plan.ts`. Vercel AI Gateway 대신 **Gemini(gemini-3.1-flash-lite) 직접 호출**로 변경 (my-video-creator와 동일한 GEMINI_API_KEY 재사용, 사용자 확인 완료). 로컬 + 배포 사이트 모두 브라우저로 끝까지 테스트 완료 (알레르기 제외, 칼로리 근사, 식단유형 반영 확인)
 - [x] 결과 리포트 화면 + 프리미엄 CTA → 온보딩 완료 시 리포트 화면 표시, 프리미엄 버튼은 결제 연동 전까지 비활성 상태
 - [x] 개인정보처리방침/약관 페이지 (건강 민감정보 동의 포함) → `web/src/app/privacy`, `web/src/app/terms` (초안, 법률 자문 전 공개 금지)
+- **(2026-08-23 추가)** 사용자가 라이브 사이트에서 온보딩→AI 식단을 직접 테스트해보고 "이거
+  그냥 내가 AI한테 물어봐도 되는 거 아니야? 굳이 사이트까지 올 이유가 없다"고 지적 → Eat This
+  Much의 "How It Works" 페이지를 실제로 확인해서, ETM이 raw AI 답변과 다른 지점(레시피 DB,
+  끼니 재생성, 장보기 목록, 팬트리)을 데이터로 확인. 그중 적은 공수로 같은 원칙을 살리는 3개를
+  구현:
+  - **끼니 단위 재생성** (`web/src/app/api/meal-plan/regenerate/route.ts`, "다른 메뉴로" 버튼) —
+    ETM의 "Endless Regeneration"과 같은 원칙. 브라우저로 실제 재생성 확인(아침 메뉴가 "현미밥
+    덮밥"→"통밀 식빵 샌드위치"로 바뀌고 나머지 3끼는 그대로 유지됨).
+  - **장보기 목록 자동 생성** (`web/src/components/onboarding/meal-plan-display.tsx`) — 이미
+    스키마에 있던 끼니별 `items`를 모아서 중복 제거만 하면 되므로 새 API 호출 없이 구현.
+  - **결과 저장 후 다시 보기** (`/plan/[id]`) — `onboarding_submissions`에 `meal_plan` 컬럼 추가
+    + `get_submission_report()` SECURITY DEFINER 함수로 "id를 아는 사람만" 그 한 행을 조회
+    (테이블에 `using(true)` select 정책을 그냥 열면 익명 키로 테이블 전체를 스캔할 수 있어
+    위험 — email 등 민감 컬럼도 이 함수 반환 목록에서 제외). **마이그레이션
+    `supabase/migrations/0002_meal_plan_and_shareable_link.sql`을 사용자가 아직 SQL Editor에서
+    실행 안 해서, 저장 버튼이 지금은 "저장에 실패했습니다" 에러를 정상적으로 띄움** — 위 "사용자
+    확인이 필요해서 멈춘 항목" 참고.
+  - 같은 세션에서 디자인 톤도 재정비: Black Han Sans(쇼츠용 블록체)를 헤더 워드마크로만 축소,
+    헤드라인은 새로 도입한 한글 세리프 **Gowun Batang**으로, 브랜드 오렌지는 채도를 낮춘
+    테라코타로 — "세련되고 지적인" 톤 요청 반영.
 
 ## Phase 2 · 영상 파이프라인 이식
 - [x] TTS 모듈 작성 → `video-pipeline/tts.py` (Edge TTS, 한국어 여/남 보이스, 실행 검증 완료)

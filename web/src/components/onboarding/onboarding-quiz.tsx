@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { DisclaimerNote } from "@/components/disclaimer-note";
 import { MealPlanPanel } from "@/components/onboarding/meal-plan-panel";
 import { supabase } from "@/lib/supabase/client";
+import type { MealPlan } from "@/lib/meal-plan";
 import {
   ACTIVITY_LABEL,
   GOAL_LABEL,
@@ -40,6 +42,8 @@ export function OnboardingQuiz() {
   const [done, setDone] = useState(false);
   const [email, setEmail] = useState("");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [aiPlan, setAiPlan] = useState<MealPlan | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   function update<K extends keyof QuizAnswers>(key: K, value: QuizAnswers[K]) {
     setAnswers((prev) => ({ ...prev, [key]: value }));
@@ -92,27 +96,37 @@ export function OnboardingQuiz() {
 
     async function saveSubmission() {
       setSaveState("saving");
-      const { error } = await supabase.from("onboarding_submissions").insert({
-        email: email || null,
-        goal: answers.goal,
-        gender: answers.gender,
-        age: Number(answers.age),
-        height_cm: Number(answers.heightCm),
-        weight_kg: Number(answers.weightKg),
-        activity: answers.activity,
-        allergies: answers.allergies,
-        diet_type: answers.dietType,
-        has_condition: answers.hasCondition,
-        condition_note: answers.conditionNote || null,
-        cooking_time: answers.cookingTime,
-        bmr: result.bmr,
-        tdee: result.tdee,
-        target_calories: result.targetCalories,
-        protein_g: result.proteinG,
-        fat_g: result.fatG,
-        carb_g: result.carbG,
-      });
-      setSaveState(error ? "error" : "saved");
+      const { data, error } = await supabase
+        .from("onboarding_submissions")
+        .insert({
+          email: email || null,
+          goal: answers.goal,
+          gender: answers.gender,
+          age: Number(answers.age),
+          height_cm: Number(answers.heightCm),
+          weight_kg: Number(answers.weightKg),
+          activity: answers.activity,
+          allergies: answers.allergies,
+          diet_type: answers.dietType,
+          has_condition: answers.hasCondition,
+          condition_note: answers.conditionNote || null,
+          cooking_time: answers.cookingTime,
+          bmr: result.bmr,
+          tdee: result.tdee,
+          target_calories: result.targetCalories,
+          protein_g: result.proteinG,
+          fat_g: result.fatG,
+          carb_g: result.carbG,
+          meal_plan: aiPlan,
+        })
+        .select("id")
+        .single();
+      if (error) {
+        setSaveState("error");
+        return;
+      }
+      setSavedId(data.id);
+      setSaveState("saved");
     }
 
     return (
@@ -166,13 +180,19 @@ export function OnboardingQuiz() {
             )}
           </div>
 
-          <MealPlanPanel answers={answers} result={result} />
+          <MealPlanPanel answers={answers} result={result} onPlanGenerated={setAiPlan} />
 
           <DisclaimerNote />
 
-          {saveState === "saved" ? (
-            <div className="rounded-lg border bg-muted/40 p-4 text-center text-sm">
-              결과가 저장되었습니다.
+          {saveState === "saved" && savedId ? (
+            <div className="space-y-2 rounded-lg border bg-muted/40 p-4 text-center text-sm">
+              <p>결과가 저장되었습니다. 이 링크로 언제든 다시 볼 수 있어요.</p>
+              <Link
+                href={`/plan/${savedId}`}
+                className="inline-block font-medium text-brand hover:underline"
+              >
+                내 결과 다시 보기 →
+              </Link>
             </div>
           ) : (
             <div className="space-y-2">

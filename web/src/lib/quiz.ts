@@ -67,7 +67,9 @@ const PROFILE_BY_COOKING: Record<CookingTime, string> = {
   high: "직접 조리 선호형",
 };
 
-/** 온보딩 결과 리포트에 쓰는 "식습관 유형" 라벨 (Noom 패턴 참고) */
-export function deriveProfileLabel(answers: QuizAnswers): string {
+/** 온보딩 결과 리포트에 쓰는 "식습관 유형" 라벨 (Noom 패턴 참고).
+ * /plan/[id]처럼 DB에서 goal/cookingTime만 읽어온 경우에도 재사용할 수 있도록 필요한
+ * 필드만 받는다. */
+export function deriveProfileLabel(answers: Pick<QuizAnswers, "goal" | "cookingTime">): string {
   return `${PROFILE_BY_GOAL[answers.goal]} · ${PROFILE_BY_COOKING[answers.cookingTime]}`;
 }
