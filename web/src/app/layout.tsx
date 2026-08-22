@@ -35,9 +35,27 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_TITLE = "한끼정답 — 맞춤 식단 & 건강정보";
+const SITE_DESCRIPTION = "오늘 뭐 먹지 고민될 때, 내 목표와 활동량에 맞춘 하루 식단 목표를 30초 만에 확인하세요.";
+
 export const metadata: Metadata = {
-  title: "한끼정답 — 맞춤 식단 & 건강정보",
-  description: "오늘 뭐 먹지 고민될 때, 내 목표와 활동량에 맞춘 하루 식단 목표를 30초 만에 확인하세요.",
+  metadataBase: new URL("https://hankki-nine.vercel.app"),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    siteName: "한끼정답",
+    locale: "ko_KR",
+    type: "website",
+    images: ["/hero-meal.jpg"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/hero-meal.jpg"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

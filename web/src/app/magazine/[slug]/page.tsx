@@ -12,9 +12,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const article = getArticleBySlug(slug);
   if (!article) return { title: "글을 찾을 수 없어요 — 한끼정답" };
+  const title = `${article.title} — 한끼정답`;
+  const description = article.body.slice(0, 100);
   return {
-    title: `${article.title} — 한끼정답`,
-    description: article.body.slice(0, 100),
+    title,
+    description,
+    openGraph: { title, description, type: "article" },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
