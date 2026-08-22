@@ -20,7 +20,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # Windows 콘솔 기본 코드페이지(cp949)가 이모지(⛔✅)를 못 그려서 print()가 죽는 문제 방지.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -30,6 +30,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
+import topic_calendar
 from compose_video import compose_short
 from script_prompt import (
     GeneratedScript,
@@ -63,6 +64,21 @@ def build_pinned_comment(source: str, next_topic_hint: str) -> str:
     return "\n\n".join(lines)
 
 
+KST = timezone(timedelta(hours=9))
+
+
+def next_publish_time_kst(hour: int = 19, minute: int = 0) -> str:
+    """오늘(KST) 지정 시각을 유튜브 scheduled_publish_at 형식으로 반환한다.
+    my-video-creator/english_words_short.py의 "익일 07:30 예약" 패턴과 동일한 방식 —
+    실행 시각(예: WSL cron이 도는 새벽 5시)과 실제 공개 시각(예: 오후 7시)을 분리해서,
+    노트북이 그 공개 시각에 켜져 있지 않아도 유튜브 서버가 알아서 정시에 공개해준다."""
+    now = datetime.now(KST)
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return target.isoformat(timespec="seconds")
+
+
 def upload_and_comment(
     video_path: str,
     title: str,
@@ -72,18 +88,38 @@ def upload_and_comment(
     next_topic_hint: str,
     credentials_file: str = "credentials.json",
     category_id: str = "27",
-    final_privacy: str = "private",
+    final_privacy: str = "public",
+    scheduled_publish_at: str | None = None,
 ) -> dict:
-    """비공개 영상에 고정 댓글을 안정적으로 다는 표준 업로드 절차.
+    """댓글까지 단 뒤 최종 공개범위로 전환하는 표준 업로드 절차.
 
-    실제로 겪은 문제: privacy_status='private'로 바로 올린 영상은 commentThreads.insert가
+    scheduled_publish_at이 주어지면(예: next_publish_time_kst()) my-video-creator/
+    english_words_short.py와 완전히 같은 패턴을 탄다 — youtube_upload.upload_video()가
+    privacy_status='public' + scheduled_publish_at + comment_text를 함께 받으면 내부적으로
+    ①일부공개(unlisted)로 먼저 올림 → ②댓글 등록 → ③private + 예약 시각으로 전환하고, 그
+    시각이 되면 유튜브가 자동으로 공개 전환한다. 이 경로가 표준이고, scheduled_publish_at을
+    안 주면(즉시 공개/비공개) 아래의 수동 unlisted→댓글→전환 절차를 대신 쓴다.
+
+    수동 절차가 필요했던 이유: privacy_status='private'로 바로 올린 영상은 commentThreads.insert가
     몇 분~20분 넘게 기다려도 403 Forbidden으로 실패하는 경우가 있었다 (유튜브가 완전 비공개
-    영상은 댓글 기능 활성화를 미루는 것으로 추정). 반면 잠깐 '일부공개(unlisted)'로 올리면
-    거의 즉시(약 10초) 댓글이 성공했다 — my-video-creator/english_words_short.py가 예약 발행
-    시 굳이 unlisted로 먼저 올렸다가 나중에 private로 바꾸는 것도 같은 이유로 보인다.
-    그래서 최종적으로 private로 남기고 싶어도, 일단 unlisted로 올려서 댓글을 확실히 단 다음
-    private로 전환한다."""
+    영상은 댓글 기능 활성화를 미루는 것으로 추정). 반면 잠깐 unlisted로 올리면 거의 즉시(약 10초)
+    댓글이 성공한다."""
     from youtube_upload import get_authenticated_service, insert_comment, upload_video
+
+    comment_text = build_pinned_comment(source, next_topic_hint)
+
+    if scheduled_publish_at:
+        return upload_video(
+            file_path=video_path,
+            title=title,
+            description=description,
+            tags=tags,
+            privacy_status="public",
+            credentials_file=credentials_file,
+            category_id=category_id,
+            scheduled_publish_at=scheduled_publish_at,
+            comment_text=comment_text,
+        )
 
     upload_status = "unlisted" if final_privacy == "private" else final_privacy
     result = upload_video(
@@ -101,7 +137,7 @@ def upload_and_comment(
     video_id = result["video_id"]
     youtube = get_authenticated_service(credentials_file=credentials_file)
     time.sleep(10)
-    comment_id = insert_comment(youtube, video_id, build_pinned_comment(source, next_topic_hint))
+    comment_id = insert_comment(youtube, video_id, comment_text)
 
     if final_privacy != upload_status:
         youtube.videos().update(
@@ -109,33 +145,6 @@ def upload_and_comment(
         ).execute()
 
     return {"success": True, "video_id": video_id, "comment_id": comment_id}
-
-# 대본이 "다음 영상 예고"로 남긴 주제를 실제로 이어가기 위한 큐. 영상이 하나 완성될 때마다
-# 그 대본의 next_topic_hint로 덮어써서, 다음 실행이 인자 없이도 그 주제를 이어받게 한다.
-QUEUE_PATH = os.path.join(BASE_DIR, "content_queue.json")
-
-
-def _load_queue() -> dict | None:
-    if not os.path.exists(QUEUE_PATH):
-        return None
-    with open(QUEUE_PATH, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _save_queue(next_topic: str, cluster: str, promised_by_title: str, promised_by_video: str) -> None:
-    with open(QUEUE_PATH, "w", encoding="utf-8") as f:
-        json.dump(
-            {
-                "next_topic": next_topic,
-                "cluster": cluster,
-                "promised_by_title": promised_by_title,
-                "promised_by_video": promised_by_video,
-                "queued_at": datetime.now().isoformat(),
-            },
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
 
 
 def compliance_check(script_text: str) -> list[str]:
@@ -172,25 +181,41 @@ def _save_metadata(path: str, result: GeneratedScript, issues: list[str]) -> Non
         )
 
 
-def run(topic: str | None = None, cluster: str | None = None, voice_id: str = VOICE_PILJAE) -> str | None:
+def build_description(result: GeneratedScript) -> str:
+    """result.script(고지 문구 포함)+출처+해시태그로 업로드 설명란을 자동 생성한다.
+    지금까지 upload_*.py를 만들 때마다 손으로 하던 걸 그대로 코드로 옮긴 것."""
+    parts = [result.script]
+    if result.source:
+        parts.append(f"출처: {result.source}")
+    hashtags = " ".join(f"#{tag}" for tag in result.tags) + " #한끼정답"
+    parts.append(hashtags)
+    return "\n\n".join(parts)
+
+
+def _generate_and_compose(
+    topic: str | None, cluster: str | None, voice_id: str
+) -> tuple[str | None, GeneratedScript | None]:
+    """대본 생성부터 mp4 합성까지. 차단되거나 캘린더가 비어있으면 (None, None)을 반환한다."""
+    upcoming_topic = None
     if topic is None:
-        queue_entry = _load_queue()
-        if not queue_entry:
-            print("⛔ 대기 중인 예고 주제가 없습니다. 주제를 직접 지정해서 실행하세요:")
-            print('   python pipeline.py "주제" "클러스터"')
-            return None
-        topic = queue_entry["next_topic"]
-        cluster = cluster or queue_entry["cluster"]
-        print(f"📌 이전 영상('{queue_entry['promised_by_title']}')이 예고한 주제를 이어서 진행합니다.")
+        today_item, upcoming_item = topic_calendar.pop_next()
+        if not today_item:
+            print("⛔ 콘텐츠 캘린더 큐가 비어있습니다. 먼저 채워주세요:")
+            print("   python topic_calendar.py")
+            return None, None
+        topic = today_item["topic"]
+        cluster = today_item["cluster"]
+        upcoming_topic = upcoming_item["topic"] if upcoming_item else None
+        print(f"📅 캘린더에서 주제를 이어받습니다: [{cluster}] {topic}")
     elif cluster is None:
         raise ValueError("topic을 직접 지정할 때는 cluster도 함께 지정해야 합니다.")
 
     print(f"대본 생성 중... (주제: {topic})")
     try:
-        result = generate_script(ScriptRequest(topic=topic, cluster=cluster))
+        result = generate_script(ScriptRequest(topic=topic, cluster=cluster, upcoming_topic=upcoming_topic))
     except (UnverifiedContentError, UngroundedStatisticError) as e:
         print(f"⛔ 자동 차단: {e}")
-        return None
+        return None, None
 
     issues = compliance_check(result.script)
 
@@ -216,7 +241,7 @@ def run(topic: str | None = None, cluster: str | None = None, voice_id: str = VO
         for issue in issues:
             print(f"  - {issue}")
         print(f"(대본 내용은 {metadata_path}에 남겨뒀습니다 — 나중에 확인 가능)")
-        return None
+        return None, None
 
     print("✅ 자동 점검 통과 — 음성/단어 타이밍 생성 중 (Typecast, 필재 보이스)...")
     audio_path, duration, words = generate_narration_with_words(result.script, audio_path, voice_id=voice_id)
@@ -231,13 +256,58 @@ def run(topic: str | None = None, cluster: str | None = None, voice_id: str = VO
     print("영상 합성 중 (카라오케 자막)...")
     compose_short(result.title, words, audio_path, video_path, background_photo_paths=photo_paths or None)
 
-    _save_queue(result.next_topic_hint, cluster, result.title, video_path)
-
     print(f"\n✅ 완료: {video_path}")
     print(f"메타데이터(스팟체크용): {metadata_path}")
-    print(f"📌 다음 예고 주제 저장됨: {result.next_topic_hint} (다음엔 인자 없이 실행하면 이어받습니다)")
-    print("업로드하려면 youtube_upload.upload_video()를 별도로 호출하세요 (자동 업로드하지 않습니다).")
+    if upcoming_topic:
+        remaining = len(topic_calendar.load_calendar())
+        print(f"📅 다음 편 예고: {result.next_topic_hint} (캘린더 큐에 {remaining}개 남음)")
+    else:
+        print(f"📌 다음 편 예고(캘린더 미사용): {result.next_topic_hint}")
+    return video_path, result
+
+
+def run(topic: str | None = None, cluster: str | None = None, voice_id: str = VOICE_PILJAE) -> str | None:
+    """영상만 만든다. 업로드는 하지 않는다 (수동으로 검토하고 싶을 때 사용)."""
+    video_path, _ = _generate_and_compose(topic, cluster, voice_id)
+    if video_path:
+        print("업로드하려면 upload_and_comment()를 별도로 호출하세요 (자동 업로드하지 않습니다).")
     return video_path
+
+
+def run_and_upload(
+    topic: str | None = None,
+    cluster: str | None = None,
+    voice_id: str = VOICE_PILJAE,
+    final_privacy: str = "public",
+    scheduled_publish_at: str | None = "AUTO_7PM",
+) -> dict | None:
+    """영상 생성부터 업로드·댓글·공개 전환까지 사람 개입 없이 전부 끝낸다.
+    WSL cron 등 무인 실행용 — daily_auto_run.py가 이 함수를 호출한다.
+
+    scheduled_publish_at 기본값 "AUTO_7PM"은 실행 시점과 무관하게 항상 그날(KST) 오후 7시에
+    유튜브가 자동으로 공개하도록 예약한다 (실행이 이미 오후 7시를 넘겼으면 다음날 오후 7시).
+    cron이 새벽에 돌고 실제 시청자가 많은 저녁에 공개하고 싶어서 만든 옵션 — None을 넘기면
+    즉시 공개(또는 final_privacy로 지정한 상태)로 바로 올라간다."""
+    video_path, result = _generate_and_compose(topic, cluster, voice_id)
+    if not video_path or not result:
+        return None
+
+    if scheduled_publish_at == "AUTO_7PM":
+        scheduled_publish_at = next_publish_time_kst(19, 0)
+
+    print("업로드 중...")
+    upload_result = upload_and_comment(
+        video_path=video_path,
+        title=result.title,
+        description=build_description(result),
+        tags=result.tags,
+        source=result.source,
+        next_topic_hint=result.next_topic_hint,
+        final_privacy=final_privacy,
+        scheduled_publish_at=scheduled_publish_at,
+    )
+    print(f"업로드 결과: {upload_result}")
+    return upload_result
 
 
 if __name__ == "__main__":
@@ -248,5 +318,5 @@ if __name__ == "__main__":
     else:
         print('사용법: python pipeline.py "주제" "클러스터"')
         print('예시:   python pipeline.py "물은 하루에 얼마나 마셔야 할까?" "영양 기초"')
-        print('인자 없이 실행하면 이전 영상이 예고한 다음 주제를 자동으로 이어서 진행합니다.')
+        print('인자 없이 실행하면 topic_calendar.py로 미리 뽑아둔 큐에서 다음 주제를 자동으로 이어서 진행합니다.')
         sys.exit(1)

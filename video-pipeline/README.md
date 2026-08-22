@@ -41,21 +41,54 @@
    - ImageMagick 의존성을 피하려고 MoviePy `TextClip` 대신 PIL로 텍스트를 직접 렌더링했고,
      MoviePy 1.0.3의 내장 `.resize()`가 최신 Pillow(10+)에서 깨지는 버그(`Image.ANTIALIAS` 제거됨)를
      피하려고 켄 번즈 줌도 직접 프레임 생성으로 구현했다.
-5. **`pipeline.py`** — 위 전부를 이어붙이는 엔드투엔드 스크립트. 자동 컴플라이언스 점검(금지어
+5. **`topic_calendar.py`** — PLAN.md의 5개 콘텐츠 클러스터(영양 기초 / 증상별 가이드 / 식단 비교 /
+   제품 큐레이션 / 루틴·기록) 각각에서 주제를 여러 개(기본 5개씩, 총 25개) 한 번에 브레인스토밍해서
+   `content_calendar.json`에 라운드로빈으로 섞어 저장한다. 검색 그라운딩이 필요 없는 "무엇을
+   다룰지" 단계라 순수 생성만 한다 — 실제 대본(각 항목의 사실 확인)은 여전히 `script_prompt.py`가
+   그때그때 검증한다. 큐가 줄어들면 `python topic_calendar.py [클러스터당 개수]`로 다시 채운다.
+6. **`pipeline.py`** — 위 전부를 이어붙이는 엔드투엔드 스크립트. 자동 컴플라이언스 점검(금지어
    스캔) 위반 시 영상을 만들지 않고 자동 스킵. 모든 결과는 `output/*_metadata.json`으로 남아
-   나중에 스팟체크 가능. 업로드는 자동으로 하지 않고 안내만 출력.
-   - **예고 문구 자동 이어받기**: 대본이 구조화된 `next_topic_hint` 필드로 남긴 "다음 편" 주제를
-     `content_queue.json`에 저장한다. `python pipeline.py`를 **인자 없이** 실행하면 직전 영상이
-     예고한 주제를 자동으로 이어서 진행 — 예고가 그냥 빈말이 되지 않게 하는 장치.
-   - **`build_pinned_comment(source, next_topic_hint)` / `upload_and_comment(...)`**: 업로드 시
-     달 고정 댓글(출처 재확인 + 다음 편 예고 + 소통 유도 + 필수 고지 문구)을 메타데이터로부터
-     자동 생성하고 등록한다. **주의**: `privacy_status='private'`로 바로 올린 영상은
-     `commentThreads.insert`가 몇 분~20분 넘게 기다려도 403으로 실패하는 걸 실제로 겪었다
-     (유튜브가 완전 비공개 영상은 댓글 기능 활성화를 미루는 것으로 추정 — 반면 '일부공개
-     (unlisted)'로 올리면 거의 즉시 성공). 그래서 `upload_and_comment()`는 최종적으로 private로
-     남기고 싶어도 **일단 unlisted로 올려서 댓글을 확실히 단 다음 private로 전환**하는 절차를
-     쓴다 (`my-video-creator/english_words_short.py`가 예약 발행 때 굳이 unlisted를 거치는 것도
-     같은 이유로 보임). 앞으로 업로드할 땐 `upload_video()`를 직접 쓰지 말고 이 함수를 쓸 것.
+   나중에 스팟체크 가능.
+   - **`run(topic=None, cluster=None)`**: 영상만 만들고 업로드는 하지 않는다 (수동 검토용).
+     `topic`을 안 주면 `topic_calendar.py`가 쌓아둔 큐에서 하나를 꺼내 쓰고, 그 대본의 예고
+     문장은 큐의 **다음** 항목(`upcoming_topic`)을 정확히 가리키도록 강제한다 — Gemini가 즉흥
+     으로 다른 주제를 예고해버려서 실제 다음 영상과 어긋나는 걸 방지.
+   - **`run_and_upload(...)`**: `run()`과 동일하게 영상을 만들고, 성공하면 설명란
+     (`build_description`)과 고정 댓글(`build_pinned_comment`)까지 자동 생성해서 업로드·공개
+     전환까지 사람 개입 없이 끝낸다. **`daily_auto_run.py`가 이 함수를 호출하는 무인 실행
+     진입점**이다.
+   - **예약 게시(`scheduled_publish_at`)**: 기본값은 실행 시각과 무관하게 **그날(KST) 오후
+     7시**(`next_publish_time_kst()`)에 유튜브가 자동으로 공개하도록 예약한다. 이걸 쓰면
+     `youtube_upload.upload_video()`가 내부적으로 ①unlisted로 올림 → ②고정 댓글 등록 →
+     ③private + 예약 시각으로 전환 → 시각이 되면 유튜브가 자동 공개, 순서로 처리한다 —
+     `my-video-creator/english_words_short.py`(익일 07:30 예약)와 완전히 같은 패턴이다.
+     크론이 새벽에 돌아도 노트북이 저녁까지 켜져 있을 필요가 없다.
+   - **`upload_and_comment(...)`**: 예약 없이 즉시 올릴 때 쓰는 저수준 함수. **주의**:
+     `privacy_status='private'`로 바로 올린 영상은 `commentThreads.insert`가 몇 분~20분
+     넘게 기다려도 403으로 실패하는 걸 실제로 겪었다 (유튜브가 완전 비공개 영상은 댓글 기능
+     활성화를 미루는 것으로 추정 — 반면 unlisted로 올리면 거의 즉시 성공). 그래서
+     `final_privacy='private'`일 때만 일단 unlisted로 올려서 댓글을 확실히 단 다음 private로
+     전환한다.
+7. **`daily_auto_run.py`** — WSL cron으로 매일 실행되는 완전 무인 진입점. `pipeline.run_and_upload()`
+   하나만 호출한다. 캘린더가 비었거나 컴플라이언스/수치 검증에 걸려 영상이 안 만들어져도
+   프로세스가 죽지 않고 로그만 남긴다.
+
+## 스케줄링 (WSL cron)
+
+`my-video-creator`의 English Words(05:00)·CoinNews Daily(05:40) Windows 작업 스케줄러와 API 키를
+공유하므로(GEMINI_API_KEY, TYPECAST_API_KEY), 같은 시간대에 돌면 쿼터/리소스가 충돌할 수 있다.
+그래서 **06:30**으로 스케줄했다 — 노트북이 켜져 있는 이른 아침에 영상을 만들고, 실제 공개는
+`next_publish_time_kst()`로 그날 저녁 7시에 예약한다 (노트북이 저녁에 꺼져 있어도 무관).
+
+```
+# WSL(Ubuntu) crontab
+30 6 * * * cd /mnt/d/AI/HealthyInfo/video-pipeline && /mnt/c/Users/qwert/AppData/Local/Programs/Python/Python313/python.exe daily_auto_run.py >> logs/daily_run.log 2>&1
+```
+
+WSL 자체에 무거운 의존성(moviepy 등)을 새로 설치하지 않고, WSL interop으로 **Windows 쪽
+python.exe를 그대로 호출**한다 (이미 필요한 패키지가 다 깔려있고, 경로/자격증명도 그대로 통함).
+cron이 도는 시간(제작)과 실제 공개 시간(저녁 7시)을 분리한 게 핵심 — 두 값 다 사용자와 상의해서
+정함(2026-08-22).
 
 ## 완료된 것 (채널/인증)
 
@@ -75,16 +108,21 @@ PEXELS_API_KEY=...       # silvernatural2@gmail.com 계정으로 발급
 TYPECAST_API_KEY=...     # my-video-creator(VocaMate)와 동일 키 재사용
 ```
 
-## 아직 만들지 않은 것
-
-- 첫 실제 **공개** 업로드 (지금까지는 비공개 테스트 업로드만 진행)
-
 ## 실행 방법
 
 ```
-python pipeline.py "주제" "콘텐츠 클러스터"
-# 예: python pipeline.py "물은 하루에 얼마나 마셔야 할까?" "영양 기초"
+# 콘텐츠 캘린더 채우기 (최초 1회 또는 큐가 줄어들 때)
+python topic_calendar.py
+
+# 영상만 만들기 (업로드 안 함, 수동 검토용)
+python pipeline.py                              # 캘린더 큐에서 자동으로 다음 주제
+python pipeline.py "주제" "콘텐츠 클러스터"        # 주제 직접 지정 (캘린더 무시)
+
+# 영상 생성부터 업로드·댓글·예약공개까지 전부 (daily_auto_run.py가 이걸 씀)
+python -c "import pipeline; pipeline.run_and_upload()"
 ```
 
 사람 확인 없이 대본 생성부터 mp4 완성까지 자동으로 끝난다. `output/` 폴더에 mp3(내레이션),
 mp4(완성 영상), metadata.json(대본/출처/검색 근거 — 나중에 스팟체크용)이 생성된다.
+2026-08-22부터 `run_and_upload()`(그리고 `daily_auto_run.py`)는 **기본적으로 전체공개**로
+예약 업로드한다 — 사용자가 파이프라인을 검증한 뒤 확정한 방침.
