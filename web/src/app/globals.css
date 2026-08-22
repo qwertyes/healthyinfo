@@ -9,7 +9,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-noto-sans-kr);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-black-han-sans);
+  --font-heading: var(--font-gowun-batang);
+  --font-brand: var(--font-black-han-sans);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -51,28 +52,30 @@
 }
 
 :root {
-  /* 브랜드 오렌지 — video-pipeline/compose_video.py의 ACCENT_COLOR(RGB 255,160,80)와
-     맞춘 값. 채널(영상)과 웹사이트의 시각 아이덴티티를 통일하기 위해 도입. */
-  --brand: oklch(0.74 0.16 55);
-  --brand-foreground: oklch(0.99 0.01 55);
+  /* 브랜드 컬러 — video-pipeline/compose_video.py의 ACCENT_COLOR(RGB 255,160,80, 오렌지)와
+     같은 색상각(hue)을 유지해 채널과의 연속성은 지키되, "세련되고 지적인" 톤으로 재정비하면서
+     채도·명도를 낮춘 차분한 테라코타로 조정했다 — 예전처럼 화면을 채우는 포인트가 아니라
+     버튼/링크 같은 절제된 강조에만 쓴다. */
+  --brand: oklch(0.6 0.1 48);
+  --brand-foreground: oklch(0.98 0.005 48);
 
-  --background: oklch(0.99 0.003 55);
-  --foreground: oklch(0.17 0.01 55);
+  --background: oklch(0.985 0.002 55);
+  --foreground: oklch(0.2 0.008 55);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.17 0.01 55);
+  --card-foreground: oklch(0.2 0.008 55);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.17 0.01 55);
+  --popover-foreground: oklch(0.2 0.008 55);
   --primary: var(--brand);
   --primary-foreground: var(--brand-foreground);
-  --secondary: oklch(0.96 0.01 55);
-  --secondary-foreground: oklch(0.28 0.02 55);
-  --muted: oklch(0.96 0.008 55);
-  --muted-foreground: oklch(0.5 0.015 55);
-  --accent: oklch(0.93 0.04 55);
-  --accent-foreground: oklch(0.3 0.05 45);
+  --secondary: oklch(0.96 0.005 55);
+  --secondary-foreground: oklch(0.28 0.01 55);
+  --muted: oklch(0.96 0.004 55);
+  --muted-foreground: oklch(0.5 0.008 55);
+  --accent: oklch(0.94 0.02 50);
+  --accent-foreground: oklch(0.32 0.03 45);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.012 55);
-  --input: oklch(0.9 0.012 55);
+  --border: oklch(0.9 0.006 55);
+  --input: oklch(0.9 0.006 55);
   --ring: var(--brand);
   --chart-1: var(--brand);
   --chart-2: oklch(0.556 0.02 55);

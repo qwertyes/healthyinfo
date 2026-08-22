@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Geist_Mono, Noto_Sans_KR, Black_Han_Sans } from "next/font/google";
+import { Geist_Mono, Gowun_Batang, Noto_Sans_KR, Black_Han_Sans } from "next/font/google";
 import "./globals.css";
 
 // 본문/UI용 — 한글 글리프를 지원하는 폰트로 교체 (기존 Geist는 latin 서브셋뿐이라
@@ -13,8 +13,17 @@ const notoSansKr = Noto_Sans_KR({
   weight: ["400", "500", "700", "900"],
 });
 
-// 헤드라인용 — video-pipeline/compose_video.py가 영상 제목/자막에 쓰는 것과 같은
-// Black Han Sans를 웹에도 재사용해서 채널과 사이트의 타이포 아이덴티티를 통일.
+// 헤드라인용 — "세련되고 지적인" 톤으로 재정비하면서 도입한 한글 세리프. 절제된 획 디테일이
+// 에디토리얼(매거진) 톤에 맞아서, 굵고 임팩트 있던 Black Han Sans 대신 "읽는" 자리의 기본
+// 헤드라인 서체로 쓴다.
+const gowunBatang = Gowun_Batang({
+  variable: "--font-gowun-batang",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
+// video-pipeline/compose_video.py가 영상 제목/자막에 쓰는 것과 같은 폰트 — 채널과의
+// 연결점을 남기기 위해 헤더 워드마크 등 작은 브랜드 터치로만 쓴다(헤드라인 전체엔 안 씀).
 const blackHanSans = Black_Han_Sans({
   variable: "--font-black-han-sans",
   subsets: ["latin"],
@@ -35,11 +44,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="ko"
-      className={`${notoSansKr.variable} ${blackHanSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${notoSansKr.variable} ${gowunBatang.variable} ${blackHanSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <header className="border-b px-6 py-4">
-          <Link href="/" className="font-heading text-lg tracking-tight text-primary">
+          <Link href="/" className="font-brand text-base tracking-tight text-brand">
             한끼정답
           </Link>
         </header>
