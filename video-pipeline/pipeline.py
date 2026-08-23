@@ -322,6 +322,8 @@ def _publish_article(
                 indent=2,
             )
 
+        # capture_output 텍스트에 한글 커밋 메시지가 섞여 있어서, Windows 기본 로케일(cp949)로
+        # 디코딩하면 깨진다 — 인코딩을 명시해서 UnicodeDecodeError를 방지한다.
         rel_path = os.path.relpath(article_path, REPO_ROOT)
         subprocess.run(["git", "add", rel_path], cwd=REPO_ROOT, check=True)
         commit = subprocess.run(
@@ -329,11 +331,14 @@ def _publish_article(
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         if commit.returncode != 0 and "nothing to commit" not in commit.stdout:
             print(f"⚠️ 아티클 git commit 실패: {commit.stdout}{commit.stderr}")
             return
-        push = subprocess.run(["git", "push"], cwd=REPO_ROOT, capture_output=True, text=True)
+        push = subprocess.run(
+            ["git", "push"], cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8"
+        )
         if push.returncode != 0:
             print(f"⚠️ 아티클 git push 실패: {push.stderr}")
         else:
