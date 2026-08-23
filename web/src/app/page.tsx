@@ -26,8 +26,10 @@ export default function Home() {
         <section className="grid gap-10 md:grid-cols-2 md:items-start">
           <div className="space-y-6">
             <div className="space-y-4">
-              <h1 className="font-heading text-3xl leading-tight tracking-tight text-balance sm:text-4xl">
-                오늘 뭐 먹지, 이제 고민하지 마세요
+              <h1 className="font-heading text-3xl leading-tight tracking-tight sm:text-4xl">
+                오늘 뭐 먹지,
+                <br />
+                이제 고민하지 마세요
               </h1>
               <p className="max-w-md text-muted-foreground">
                 나이·활동량·목표만 입력하면 하루 칼로리와 영양소 목표를 바로 계산해드립니다.
