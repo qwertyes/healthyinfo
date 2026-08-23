@@ -7,11 +7,17 @@ import {
   buildMealPlanPrompt,
   type MealPlanRequestInput,
 } from "@/lib/meal-plan";
+import { MEAL_PLAN_QUOTA_MESSAGE, checkMealPlanQuota } from "@/lib/rate-limit";
 
 // my-video-creator와 동일한 env var 이름(GEMINI_API_KEY)을 그대로 사용
 const google = createGoogle({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function POST(request: Request) {
+  const quota = await checkMealPlanQuota(request);
+  if (!quota.allowed) {
+    return NextResponse.json({ error: MEAL_PLAN_QUOTA_MESSAGE }, { status: 429 });
+  }
+
   const body = (await request.json()) as Partial<MealPlanRequestInput>;
 
   if (

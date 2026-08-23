@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist_Mono, Gowun_Batang, Noto_Sans_KR, Black_Han_Sans } from "next/font/google";
+import { AuthStatus } from "@/components/auth-status";
 import "./globals.css";
 
 // 본문/UI용 — 한글 글리프를 지원하는 폰트로 교체 (기존 Geist는 latin 서브셋뿐이라
@@ -65,10 +66,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${notoSansKr.variable} ${gowunBatang.variable} ${blackHanSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <header className="border-b px-6 py-4">
+        <header className="flex items-center justify-between border-b px-6 py-4">
           <Link href="/" className="font-brand text-base tracking-tight text-brand">
             한끼정답
           </Link>
+          <AuthStatus />
         </header>
         {children}
       </body>

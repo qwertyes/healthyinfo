@@ -101,10 +101,12 @@ export function OnboardingQuiz() {
       // (get_submission_report() SECURITY DEFINER 함수로만 조회 가능). 그래서 대신 브라우저에서
       // UUID를 직접 만들어 같이 보낸다 — INSERT만 하면 되니 SELECT 권한이 아예 필요 없어진다.
       const newId = crypto.randomUUID();
+      const { data: userData } = await supabase.auth.getUser();
       const { error } = await supabase
         .from("onboarding_submissions")
         .insert({
           id: newId,
+          user_id: userData.user?.id ?? null,
           email: email || null,
           goal: answers.goal,
           gender: answers.gender,
