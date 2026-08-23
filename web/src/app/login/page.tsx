@@ -43,7 +43,16 @@ export function LoginButtons({ next = "/" }: { next?: string }) {
   async function login(provider: "google" | "kakao") {
     setLoading(provider);
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
+    await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo,
+        // Supabase가 카카오에 기본으로 요청하는 scope에는 account_email이 포함되는데,
+        // 비즈 앱 전환 전이라 이메일 동의항목이 승인돼 있지 않아 카카오가 인가 요청 자체를
+        // 거부한다(KOE205). 닉네임만 요청하도록 명시해서 회피한다.
+        ...(provider === "kakao" ? { scopes: "profile_nickname" } : {}),
+      },
+    });
   }
 
   return (
