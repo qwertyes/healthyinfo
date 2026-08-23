@@ -18,6 +18,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -305,6 +306,19 @@ def _publish_article(
         slug = slug_from_video_path(video_path)
         os.makedirs(ARTICLES_DIR, exist_ok=True)
         article_path = os.path.join(ARTICLES_DIR, f"{slug}.json")
+
+        # 영상 만들 때 이미 받아둔 Pexels 배경사진(output/{date_tag}_bg_0.jpg)을 그대로 매거진
+        # 썸네일로 재사용한다 — 새 이미지 API 호출도, 저작권 문제도 없음(같은 소스).
+        date_tag = slug.replace("-", "_")
+        source_photo = os.path.join(OUTPUT_DIR, f"{date_tag}_bg_0.jpg")
+        thumbnail_rel_path = None
+        if os.path.exists(source_photo):
+            thumb_dir = os.path.join(REPO_ROOT, "web", "public", "magazine")
+            os.makedirs(thumb_dir, exist_ok=True)
+            thumb_path = os.path.join(thumb_dir, f"{slug}.jpg")
+            shutil.copyfile(source_photo, thumb_path)
+            thumbnail_rel_path = os.path.relpath(thumb_path, REPO_ROOT)
+
         with open(article_path, "w", encoding="utf-8") as f:
             json.dump(
                 {
@@ -316,6 +330,7 @@ def _publish_article(
                     "tags": result.tags,
                     "youtubeVideoId": video_id,
                     "publishedAt": published_at,
+                    "thumbnailUrl": f"/magazine/{slug}.jpg" if thumbnail_rel_path else None,
                 },
                 f,
                 ensure_ascii=False,
@@ -325,7 +340,8 @@ def _publish_article(
         # capture_output 텍스트에 한글 커밋 메시지가 섞여 있어서, Windows 기본 로케일(cp949)로
         # 디코딩하면 깨진다 — 인코딩을 명시해서 UnicodeDecodeError를 방지한다.
         rel_path = os.path.relpath(article_path, REPO_ROOT)
-        subprocess.run(["git", "add", rel_path], cwd=REPO_ROOT, check=True)
+        add_paths = [rel_path] + ([thumbnail_rel_path] if thumbnail_rel_path else [])
+        subprocess.run(["git", "add", *add_paths], cwd=REPO_ROOT, check=True)
         commit = subprocess.run(
             ["git", "commit", "-m", f"Publish article: {result.title}"],
             cwd=REPO_ROOT,

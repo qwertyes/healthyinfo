@@ -74,24 +74,29 @@
      한다 — 콘텐츠를 두 번 안 만들고도 "영상=아티클 1:1 매칭"을 달성. 실패해도(네트워크 등)
      이미 끝난 영상 업로드는 롤백하지 않고 로그만 남긴다. 웹 쪽 소비는
      `web/src/lib/articles.ts` + `web/src/app/magazine/`.
-7. **`daily_auto_run.py`** — WSL cron으로 매일 실행되는 완전 무인 진입점. `pipeline.run_and_upload()`
-   하나만 호출한다. 캘린더가 비었거나 컴플라이언스/수치 검증에 걸려 영상이 안 만들어져도
-   프로세스가 죽지 않고 로그만 남긴다.
+7. **`daily_auto_run.py`** — Windows 작업 스케줄러로 매일 실행되는 완전 무인 진입점.
+   `pipeline.run_and_upload()` 하나만 호출한다. 캘린더가 비었거나 컴플라이언스/수치 검증에
+   걸려 영상이 안 만들어져도 프로세스가 죽지 않고 로그만 남긴다.
 
-## 스케줄링 (WSL cron)
+## 스케줄링 (Windows 작업 스케줄러)
 
-`my-video-creator`의 English Words(05:00)·CoinNews Daily(05:40) Windows 작업 스케줄러와 API 키를
-공유하므로(GEMINI_API_KEY, TYPECAST_API_KEY), 같은 시간대에 돌면 쿼터/리소스가 충돌할 수 있다.
-그래서 **06:30**으로 스케줄했다 — 노트북이 켜져 있는 이른 아침에 영상을 만들고, 실제 공개는
+처음엔 WSL cron으로 스케줄했었는데(2026-08-22), 다음날 실제로 06:30에 영상이 안 만들어져서
+확인해보니 **그 시각에 WSL 인스턴스 자체가 꺼져있었다** (`uptime -s`로 확인) — cron은 놓친
+시간을 나중에 따라잡아 실행해주지 않아서 그냥 조용히 스킵된 것. `my-video-creator`의 English
+Words/CoinNews Daily도 실은 WSL cron이 아니라 Windows 작업 스케줄러를 쓰고 있었다(처음에
+잘못 참고함). Windows 작업 스케줄러는 **"놓친 작업을 컴퓨터가 켜지면 바로 실행"** 옵션
+(`StartWhenAvailable`)이 있어서 이 문제가 없다 — 2026-08-23에 교체.
+
+`my-video-creator`의 English Words(05:00)·CoinNews Daily(05:40) 작업과 API 키를 공유하므로
+(GEMINI_API_KEY, TYPECAST_API_KEY), 같은 시간대에 돌면 쿼터/리소스가 충돌할 수 있다. 그래서
+**06:30**으로 스케줄했다 — 노트북이 켜져 있는 이른 아침에 영상을 만들고, 실제 공개는
 `next_publish_time_kst()`로 그날 저녁 7시에 예약한다 (노트북이 저녁에 꺼져 있어도 무관).
 
-```
-# WSL(Ubuntu) crontab
-30 6 * * * cd /mnt/d/AI/HealthyInfo/video-pipeline && /mnt/c/Users/qwert/AppData/Local/Programs/Python/Python313/python.exe daily_auto_run.py >> logs/daily_run.log 2>&1
-```
-
-WSL 자체에 무거운 의존성(moviepy 등)을 새로 설치하지 않고, WSL interop으로 **Windows 쪽
-python.exe를 그대로 호출**한다 (이미 필요한 패키지가 다 깔려있고, 경로/자격증명도 그대로 통함).
+작업 이름: **"Hankki Daily Video"** (PowerShell `Get-ScheduledTask -TaskName "Hankki Daily Video"`로
+확인 가능). `Register-ScheduledTask`로 생성, 매일 06:30 트리거 + `StartWhenAvailable` +
+`ExecutionTimeLimit` 1시간 + 실패 시 10분 간격 2회 재시도. 실행 커맨드는
+`python.exe daily_auto_run.py` (WorkingDirectory: `video-pipeline/`) — WSL을 거치지 않고 이미
+필요한 패키지가 다 깔려있는 Windows 쪽 python.exe를 바로 호출한다.
 cron이 도는 시간(제작)과 실제 공개 시간(저녁 7시)을 분리한 게 핵심 — 두 값 다 사용자와 상의해서
 정함(2026-08-22).
 
