@@ -96,9 +96,15 @@ export function OnboardingQuiz() {
 
     async function saveSubmission() {
       setSaveState("saving");
-      const { data, error } = await supabase
+      // id를 서버에서 되받아오려면(.select()) 저장한 행을 다시 읽을 SELECT 권한이 필요한데,
+      // 개인정보 보호를 위해 anon 키로는 테이블을 읽을 수 있는 정책을 일부러 안 열어뒀다
+      // (get_submission_report() SECURITY DEFINER 함수로만 조회 가능). 그래서 대신 브라우저에서
+      // UUID를 직접 만들어 같이 보낸다 — INSERT만 하면 되니 SELECT 권한이 아예 필요 없어진다.
+      const newId = crypto.randomUUID();
+      const { error } = await supabase
         .from("onboarding_submissions")
         .insert({
+          id: newId,
           email: email || null,
           goal: answers.goal,
           gender: answers.gender,
@@ -118,14 +124,12 @@ export function OnboardingQuiz() {
           fat_g: result.fatG,
           carb_g: result.carbG,
           meal_plan: aiPlan,
-        })
-        .select("id")
-        .single();
+        });
       if (error) {
         setSaveState("error");
         return;
       }
-      setSavedId(data.id);
+      setSavedId(newId);
       setSaveState("saved");
     }
 
