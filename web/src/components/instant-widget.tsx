@@ -61,8 +61,8 @@ export function InstantWidget() {
         <CardTitle>30초 만에 내 하루 식단 목표 확인하기</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-          <div className="col-span-2 flex gap-2">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="col-span-1 flex gap-2 sm:col-span-2">
             {(["female", "male"] as Gender[]).map((g) => (
               <Button
                 key={g}
@@ -104,7 +104,7 @@ export function InstantWidget() {
             </Select>
           </div>
 
-          <div className="col-span-2 space-y-1.5">
+          <div className="col-span-1 space-y-1.5 sm:col-span-2">
             <Label>활동량</Label>
             <Select value={activity} onValueChange={(v) => setActivity(v as ActivityLevel)}>
               <SelectTrigger className="w-full">
@@ -120,7 +120,7 @@ export function InstantWidget() {
             </Select>
           </div>
 
-          <Button type="submit" className="col-span-2">
+          <Button type="submit" className="col-span-1 sm:col-span-2">
             지금 바로 확인하기
           </Button>
         </form>
