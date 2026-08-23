@@ -11,11 +11,13 @@
 - ~~Supabase 계정 생성~~ → **완료** (silvernatural2@gmail.com, 프로젝트 hankki, Seoul 리전)
 - ~~Vercel 계정/프로젝트 생성~~ → **완료, 배포됨: https://hankki-nine.vercel.app**
 - ~~새 YouTube 채널 + Google Cloud OAuth 클라이언트 발급~~ → **완료** (silvernatural2@gmail.com, 채널명 "한끼정답", GCP 프로젝트 "hankki-video", `video-pipeline/credentials.json` 발급 및 API 호출 테스트 완료)
-- **[ ] Supabase 마이그레이션 `0002_meal_plan_and_shareable_link.sql` 미실행** (2026-08-23) — Claude는
-  service_role 키가 없어서(의도적으로 안 줌) 직접 실행 불가. **사용자가 Supabase SQL Editor에
-  붙여넣어 실행해야** "결과 저장하기" → `/plan/[id]` 재조회 기능이 실제로 동작함. 그 전까지는
-  저장 버튼을 눌러도 "저장에 실패했습니다" 에러가 뜨는 게 정상(컬럼이 없어서) — 코드 자체는
-  이미 배포되어 있고 이 SQL만 실행하면 바로 살아남.
+- ~~Supabase 마이그레이션 `0002_meal_plan_and_shareable_link.sql` 미실행~~ → **완료** (2026-08-23,
+  사용자가 SQL Editor에서 실행). 실행 후에도 "결과 저장하기"가 계속 401/42501로 실패해서 함께
+  디버깅 — 진짜 원인은 마이그레이션과 무관하게, 오늘 추가한 웹 코드가 insert에 `.select("id")`를
+  붙여서 저장한 행을 되읽으려 한 것이었음(SELECT 권한이 없어서 실패). `onboarding-quiz.tsx`가
+  `crypto.randomUUID()`로 id를 직접 만들어 보내도록 고쳐서 해결 — 저장 → `/plan/[id]` 재조회까지
+  라이브에서 확인 완료. (디버깅 과정에서 생긴 테스트용 더미 행 1개가 `onboarding_submissions`에
+  남아있음 — bmr:1000 같은 가짜 값, 개인정보 없음, 원하면 Supabase Table Editor에서 지우면 됨)
 → 사용자 확인이 필요한 항목은 모두 끝났습니다. 이제부터는 계정/인프라가 아니라 실제 콘텐츠 제작(영상 템플릿, 대본, 업로드) 작업입니다.
 
 ## 완료 — 영상 퀄리티 개선 (2026-08-21)
