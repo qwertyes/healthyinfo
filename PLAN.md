@@ -5,6 +5,25 @@
 
 **진행률: 22 / 27 (81%)** (Phase 2에서 항목 하나가 둘로 나뉘어 총 개수가 26→27로 조정됨)
 
+## 사용자 확인/작업이 필요해서 멈춘 항목 (2026-08-23 추가)
+- **구글/카카오 로그인 구현 완료, Supabase 설정 필요**: VocaMate와 동일한 방식(Supabase Auth
+  내장 OAuth provider, `@supabase/ssr`)으로 `/login` 페이지, `/auth/callback`, 세션 갱신용
+  `proxy.ts`, 헤더의 로그인/로그아웃 상태 구현 완료. 로그인하면 `onboarding_submissions`에
+  `user_id`가 같이 저장됨. **다만 아래는 코드로 할 수 없는 부분이라 사용자가 직접 해줘야 함**:
+  1. Supabase 대시보드 → SQL Editor에서 `supabase/migrations/0004_link_submissions_to_login.sql`,
+     `0005_meal_plan_rate_limit.sql` 실행 (0002/0003과 같은 방식)
+  2. Supabase 대시보드 → Authentication → Providers에서 **Google**, **Kakao** 활성화하고
+     각각의 Client ID/Secret(Kakao는 REST API 키) 입력 — VocaMate와 마찬가지로 이 값은
+     Supabase 대시보드에만 넣고 코드/env에는 안 넣음
+  3. Supabase 대시보드 → Authentication → URL Configuration의 Redirect URLs에
+     `https://hankki-nine.vercel.app/auth/callback`과 (로컬 테스트용) `http://localhost:3000/auth/callback` 추가
+  4. Google/Kakao 각 개발자 콘솔에서 OAuth redirect URI를 Supabase가 주는
+     `https://<project-ref>.supabase.co/auth/v1/callback`로 등록
+- **AI 식단 생성 하루 3회 제한 구현 완료, 마이그레이션 실행 필요**: 로그인 전이라 IP 해시
+  기준으로 제한(`check_meal_plan_quota` 함수), 위 1번 마이그레이션에 포함됨. 마이그레이션
+  실행 전까지는 함수가 없어서 quota 체크가 에러 → "실패해도 열어준다(fail-open)"로 짜여있어
+  당장 서비스가 막히진 않지만, 실행하기 전까진 실질적으로 무제한 상태.
+
 ## 사용자 확인이 필요해서 멈춘 항목
 - ~~채널명~~ → **확정: 한끼정답 (영문/기술명: Hankki)**
 - **도메인 구매**: 보류 — 정식 커스텀 도메인 없이 Vercel 기본 주소(`*.vercel.app`)로 운영
