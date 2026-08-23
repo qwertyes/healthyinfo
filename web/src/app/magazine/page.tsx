@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { CLUSTERS, getAllArticles } from "@/lib/articles";
@@ -62,15 +63,26 @@ export default async function MagazinePage({
               <Link
                 key={article.slug}
                 href={`/magazine/${article.slug}`}
-                className="group flex flex-col gap-2 rounded-xl border p-5 transition-colors hover:border-brand/50 hover:bg-accent"
+                className="group flex flex-col overflow-hidden rounded-xl border transition-colors hover:border-brand/50 hover:bg-accent"
               >
-                <Badge variant="outline" className="w-fit text-muted-foreground">
-                  {article.cluster}
-                </Badge>
-                <h2 className="font-heading text-base leading-snug tracking-tight">
-                  {article.title}
-                </h2>
-                <p className="line-clamp-2 text-sm text-muted-foreground">{article.body}</p>
+                {article.thumbnailUrl && (
+                  <Image
+                    src={article.thumbnailUrl}
+                    alt=""
+                    width={400}
+                    height={225}
+                    className="aspect-video w-full object-cover"
+                  />
+                )}
+                <div className="flex flex-col gap-2 p-5">
+                  <Badge variant="outline" className="w-fit text-muted-foreground">
+                    {article.cluster}
+                  </Badge>
+                  <h2 className="font-heading text-base leading-snug tracking-tight">
+                    {article.title}
+                  </h2>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">{article.body}</p>
+                </div>
               </Link>
             ))}
           </div>

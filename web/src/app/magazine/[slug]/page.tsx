@@ -14,11 +14,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!article) return { title: "글을 찾을 수 없어요 — 한끼정답" };
   const title = `${article.title} — 한끼정답`;
   const description = article.body.slice(0, 100);
+  const images = article.thumbnailUrl ? [article.thumbnailUrl] : undefined;
   return {
     title,
     description,
-    openGraph: { title, description, type: "article" },
-    twitter: { card: "summary_large_image", title, description },
+    openGraph: { title, description, type: "article", images },
+    twitter: { card: "summary_large_image", title, description, images },
   };
 }
 

@@ -10,6 +10,7 @@ export interface Article {
   tags: string[];
   youtubeVideoId: string;
   publishedAt: string;
+  thumbnailUrl?: string | null;
 }
 
 // 5개 콘텐츠 클러스터 — video-pipeline/topic_calendar.py의 CLUSTERS와 동일한 이름을 쓴다.

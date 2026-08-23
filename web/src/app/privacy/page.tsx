@@ -7,7 +7,7 @@ export default function PrivacyPage() {
     <main className="flex flex-1 justify-center px-6 py-16">
       <article className="w-full max-w-2xl space-y-8 text-sm leading-relaxed">
         <header className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">개인정보처리방침</h1>
+          <h1 className="font-heading text-2xl tracking-tight">개인정보처리방침</h1>
           <p className="text-muted-foreground">시행일: 작성 예정 (정식 서비스 오픈 전 확정)</p>
         </header>
 
