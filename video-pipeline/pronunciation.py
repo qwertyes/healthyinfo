@@ -2,9 +2,9 @@
 TTS가 잘못 읽는 단어를 발음대로 치환해서 내레이션 입력 텍스트에만 적용한다.
 대본 원문(result.script, 웹 아티클/영상 설명란에 쓰이는 값)은 건드리지 않는다 —
 "오메가3"처럼 쓰기엔 이 표기가 맞고, 소리 낼 때만 "오메가쓰리"로 바꾸면 되기 때문.
-카라오케 자막은 TTS가 돌려주는 단어 타이밍을 그대로 쓰므로, 여기서 바꾼 표기가
-자막에도 그대로 반영된다(예: 화면에 "오메가쓰리"로 표시됨) — 발음 정확도가 우선이라
-의도된 동작이다.
+카라오케 자막도 화면엔 원문 표기("오메가3")가 나오도록, TTS가 돌려준 단어 타이밍의
+텍스트만 restore_original_spelling()으로 다시 원문 표기로 되돌려서 쓴다(타이밍 자체는
+그대로 유지) — 들을 땐 "오메가쓰리", 볼 땐 "오메가3".
 
 건강/영양 콘텐츠에서 한국어 TTS가 자주 틀리는 패턴: 알파벳+숫자 조합을 숫자 그대로
 (사이시옷 없이) 읽어버리는 경우가 많다 — "오메가3"를 "오메가삼"으로, "비타민B12"를
@@ -34,4 +34,11 @@ def apply_pronunciation_fixes(text: str) -> str:
     """TTS로 보내기 직전에만 호출한다 — 반환값을 result.script에 다시 대입하지 말 것."""
     for original, spoken in PRONUNCIATION_FIXES:
         text = text.replace(original, spoken)
+    return text
+
+
+def restore_original_spelling(text: str) -> str:
+    """TTS가 돌려준 단어 타이밍의 텍스트를 자막용으로 원문 표기로 되돌린다."""
+    for original, spoken in PRONUNCIATION_FIXES:
+        text = text.replace(spoken, original)
     return text

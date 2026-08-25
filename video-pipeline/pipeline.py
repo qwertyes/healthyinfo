@@ -45,7 +45,7 @@ from script_prompt import (
 )
 from stock_photo import search_photos
 from typecast_tts import VOICE_PILJAE, generate_narration_with_words
-from pronunciation import apply_pronunciation_fixes
+from pronunciation import apply_pronunciation_fixes, restore_original_spelling
 
 # COMPLIANCE_COPY_GUIDE.md의 금지 표현 목록 — 자동 점검용 (사람 검수 없이 이게 최종 게이트)
 BANNED_PATTERNS = [
@@ -268,6 +268,9 @@ def _generate_and_compose(
     print("✅ 자동 점검 통과 — 음성/단어 타이밍 생성 중 (Typecast, 필재 보이스)...")
     narration_text = apply_pronunciation_fixes(result.script)
     audio_path, duration, words = generate_narration_with_words(narration_text, audio_path, voice_id=voice_id)
+    # 발음용으로 바꿔치기했던 표기를 자막 텍스트에서는 원문 표기로 되돌린다(타이밍은 유지).
+    for w in words:
+        w.text = restore_original_spelling(w.text)
 
     print(f"배경 사진 검색 중... ({result.image_query})")
     photo_paths = search_photos(result.image_query, photo_prefix, count=3)
