@@ -28,6 +28,15 @@ export async function proxy(request: NextRequest) {
 
   await supabase.auth.getUser();
 
+  // 방문 통계용 — 실제 페이지 이동(GET)만 집계, API 호출/폼 제출 등은 제외.
+  if (request.method === "GET" && !request.nextUrl.pathname.startsWith("/api")) {
+    try {
+      await supabase.from("page_views").insert({ path: request.nextUrl.pathname });
+    } catch {
+      // 통계 기록 실패는 페이지 로드를 막을 이유가 안 됨 — 조용히 무시.
+    }
+  }
+
   return response;
 }
 
