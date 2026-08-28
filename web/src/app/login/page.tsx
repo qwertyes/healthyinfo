@@ -37,22 +37,15 @@ function KakaoIcon() {
   );
 }
 
-export function LoginButtons({ next = "/" }: { next?: string }) {
+export function LoginButtons() {
   const [loading, setLoading] = useState<"google" | "kakao" | null>(null);
 
   async function login(provider: "google" | "kakao") {
     setLoading(provider);
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo,
-        // Supabase가 카카오에 기본으로 요청하는 scope에는 account_email이 포함되는데,
-        // 비즈 앱 전환 전이라 이메일 동의항목이 승인돼 있지 않아 카카오가 인가 요청 자체를
-        // 거부한다(KOE205). 닉네임만 요청하도록 명시해서 회피한다.
-        ...(provider === "kakao" ? { scopes: "profile_nickname" } : {}),
-      },
-    });
+    // Supabase의 Redirect URLs 허용목록은 쿼리스트링까지 완전히 일치해야 통과되므로,
+    // 쿼리스트링 없이 허용목록에 등록해둔 그대로("<origin>/auth/callback")만 보낸다.
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
   }
 
   return (
