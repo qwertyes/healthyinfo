@@ -483,14 +483,14 @@ def _render_text_title(text: str) -> Image.Image:
     img_h = line_height * len(lines) + 20
     img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    last_i = len(lines) - 1
+    # 예전엔 마지막 줄을 무조건 포인트 컬러로 강조했는데, 줄바꿈이 문장부호 기준이다 보니
+    # 마지막 줄이 항상 "결론/반전 문구"인 건 아니어서 그냥 어색해 보이는 경우가 있었다
+    # (사용자 피드백) — 그래서 전체를 같은 색으로 통일한다.
     for i, line in enumerate(lines):
         x = (img_w - line_widths[i]) / 2
         y = 10 + i * line_height
-        # 마지막 줄(보통 결론/반전 문구)을 포인트 컬러로 강조 — 요즘 쇼츠 썸네일 스타일 참고.
-        color = ACCENT_COLOR if i == last_i else TITLE_COLOR
         draw.text((x + 3, y + 3), line, font=font, fill=(0, 0, 0, 190))
-        draw.text((x, y), line, font=font, fill=(*color, 255))
+        draw.text((x, y), line, font=font, fill=(*TITLE_COLOR, 255))
     return img
 
 
