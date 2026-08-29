@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { DIET_TYPE_LABEL, type QuizAnswers } from "@/lib/quiz";
 import { GOAL_LABEL, type NutritionResult } from "@/lib/nutrition";
 import type { Meal, MealPlan } from "@/lib/meal-plan";
@@ -21,35 +22,61 @@ export function MealPlanPanel({
   const [plan, setPlan] = useState<MealPlan | null>(null);
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [showTodayForm, setShowTodayForm] = useState(false);
+  const [todayNote, setTodayNote] = useState("");
+  const [todayLoading, setTodayLoading] = useState(false);
+  const [todayError, setTodayError] = useState<string | null>(null);
+
+  async function requestPlan(todayNoteValue?: string) {
+    const res = await fetch("/api/meal-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        goal: GOAL_LABEL[answers.goal],
+        dietType: DIET_TYPE_LABEL[answers.dietType],
+        allergies: answers.allergies,
+        cookingTime: answers.cookingTime,
+        targetCalories: result.targetCalories,
+        proteinG: result.proteinG,
+        fatG: result.fatG,
+        carbG: result.carbG,
+        todayNote: todayNoteValue,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error ?? "식단 생성에 실패했습니다. 다시 시도해주세요.");
+    }
+    return (await res.json()) as MealPlan;
+  }
 
   async function generate() {
     setState("loading");
     try {
-      const res = await fetch("/api/meal-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          goal: GOAL_LABEL[answers.goal],
-          dietType: DIET_TYPE_LABEL[answers.dietType],
-          allergies: answers.allergies,
-          cookingTime: answers.cookingTime,
-          targetCalories: result.targetCalories,
-          proteinG: result.proteinG,
-          fatG: result.fatG,
-          carbG: result.carbG,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? "식단 생성에 실패했습니다. 다시 시도해주세요.");
-      }
-      const data = (await res.json()) as MealPlan;
+      const data = await requestPlan();
       setPlan(data);
       setState("done");
       onPlanGenerated?.(data);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "식단 생성에 실패했습니다. 다시 시도해주세요.");
       setState("error");
+    }
+  }
+
+  async function regenerateToday() {
+    setTodayLoading(true);
+    setTodayError(null);
+    try {
+      const data = await requestPlan(todayNote.trim() || undefined);
+      setPlan(data);
+      setShowTodayForm(false);
+      setTodayNote("");
+      onPlanGenerated?.(data);
+    } catch (err) {
+      // 실패해도 기존 식단은 그대로 둔다 — 처음부터 다시 만들라고 강요하지 않는다.
+      setTodayError(err instanceof Error ? err.message : "다시 만들기에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setTodayLoading(false);
     }
   }
 
@@ -117,9 +144,36 @@ export function MealPlanPanel({
   if (!plan) return null;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <MealPlanDisplay plan={plan} onRegenerate={regenerateMeal} regeneratingIndex={regeneratingIndex} />
       {regenerateError && <p className="text-sm text-destructive">{regenerateError}</p>}
+
+      <div className="rounded-lg border border-dashed p-3 space-y-2">
+        {!showTodayForm ? (
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => setShowTodayForm(true)}>
+            오늘 컨디션 반영해서 다시 받기
+          </Button>
+        ) : (
+          <div className="space-y-2">
+            <Textarea
+              placeholder="예: 어제 과식했어요 / 오늘은 매운 음식이 당겨요 (선택)"
+              value={todayNote}
+              onChange={(e) => setTodayNote(e.target.value)}
+              disabled={todayLoading}
+              className="text-sm"
+            />
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowTodayForm(false)} disabled={todayLoading}>
+                취소
+              </Button>
+              <Button size="sm" className="flex-1" onClick={regenerateToday} disabled={todayLoading}>
+                {todayLoading ? "다시 만드는 중..." : "오늘 식단 다시 만들기"}
+              </Button>
+            </div>
+            {todayError && <p className="text-sm text-destructive">{todayError}</p>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

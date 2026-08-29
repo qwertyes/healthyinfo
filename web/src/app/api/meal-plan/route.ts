@@ -41,6 +41,7 @@ export async function POST(request: Request) {
     proteinG: body.proteinG,
     fatG: body.fatG,
     carbG: body.carbG,
+    todayNote: body.todayNote?.trim().slice(0, 200) || undefined,
   };
 
   try {

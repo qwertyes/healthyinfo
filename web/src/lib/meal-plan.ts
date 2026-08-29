@@ -46,6 +46,7 @@ export interface MealPlanRequestInput {
   proteinG: number;
   fatG: number;
   carbG: number;
+  todayNote?: string;
 }
 
 export function buildMealPlanPrompt(input: MealPlanRequestInput): string {
@@ -56,9 +57,12 @@ export function buildMealPlanPrompt(input: MealPlanRequestInput): string {
     `요리 가능 시간: ${input.cookingTime}`,
     `하루 목표 칼로리: ${input.targetCalories}kcal`,
     `목표 영양소: 단백질 ${input.proteinG}g, 지방 ${input.fatG}g, 탄수화물 ${input.carbG}g`,
+    input.todayNote ? `오늘 특별히 반영할 점: ${input.todayNote}` : "",
     "",
     "위 조건에 맞는 하루 식단을 추천해줘.",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 const SLOT_KOREAN: Record<Meal["slot"], string> = {
