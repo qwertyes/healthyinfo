@@ -37,6 +37,9 @@ export function AuthStatus() {
   return (
     <div className="flex items-center gap-3 text-sm">
       <span className="text-muted-foreground">{label}</span>
+      <Link href="/plan" className="font-medium text-muted-foreground hover:text-foreground">
+        내 기록
+      </Link>
       <button
         type="button"
         className="font-medium text-muted-foreground hover:text-foreground"
