@@ -66,7 +66,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${notoSansKr.variable} ${gowunBatang.variable} ${blackHanSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {/* deploy-check-20260904-1 */}
+        {/* deploy-check-20260904-2-public-repo */}
         <header className="flex items-center justify-between border-b px-6 py-4">
           <Link href="/" className="font-brand text-base tracking-tight text-brand">
             한끼정답
