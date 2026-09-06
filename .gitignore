@@ -21,6 +21,7 @@ credentials.json
 video-pipeline/samples/
 video-pipeline/output/
 video-pipeline/content_calendar.json
+video-pipeline/cta_style_state.json
 *.mp3
 *.mp4
 

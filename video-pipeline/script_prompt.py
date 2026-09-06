@@ -59,9 +59,12 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
    "인슐린 민감도가 일시적으로 낮아질 수 있다"처럼 숫자 없이 정성적으로만 표현하세요.
 
 [정보 밀도]
-4. 반드시 구체적인 사실을 **2~3개 이상** 포함하세요 (숫자, 비교, 방법 이름, 조건 등 — 단, 위
-   사실 확인 규칙을 지킨 것만). 사실 하나만 던지고 늘어지지 말고, 서로 다른 각도(예: 단기 효과
-   + 장기 효과, 원인 + 대처법)의 사실을 엮어서 내용을 풍부하게 만드세요. "사람마다 다릅니다",
+4. 반드시 서로 다른 근거·사례를 **2~3개 이상** 포함하세요 (숫자, 비교, 방법 이름, 조건 등 — 단, 위
+   사실 확인 규칙을 지킨 것만). 각 근거는 "제시 → 그게 왜 중요한지/무슨 의미인지" 까지 완결한
+   뒤에 다음 근거로 넘어가세요 — 근거를 던져놓고 설명 없이 다음 문장으로 넘어가거나, 하나의
+   근거만 붙잡고 늘어지는 것 둘 다 금지입니다. 그리고 이 여러 근거들은 서로 무관한 잡다한
+   정보 나열이 아니라, 하나의 명확한 핵심 메시지를 각기 다른 각도(예: 단기 효과 + 장기 효과,
+   원인 + 대처법, 흔한 오해 + 실제 사실)에서 뒷받침해야 합니다. "사람마다 다릅니다",
    "전문가와 상담하세요", "균형이 중요합니다" 같은 알맹이 없는 문장으로 본문을 채우거나
    결론을 내리지 마세요.
 5. "OO이 나에게 맞을까?"처럼 개인차가 있는 주제라도, 판단 기준이 되는 구체적 조건을
@@ -73,15 +76,20 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
    낫다", "~하면 ~하다"처럼 조건과 결론이 짝지어진 문장으로 마무리하세요. 예: "커피는 공복보다
    식사 후 30분 뒤에 마시는 게 혈당 스파이크를 줄이는 데 유리합니다." 이 결론 문장 다음에
    바로 아래 6번 규칙의 다음 영상 예고가 이어집니다.
-6. 위 한 줄 결론 다음, 대본의 마지막 문장(필수 고지 문구 바로 앞)에는 딱 한 줄로 아래 두
-   가지를 자연스럽게 이어서 담으세요 — 광고 카피처럼 따로따로 붙이지 말고 한 호흡의
-   말하듯이:
+6. 위 한 줄 결론 다음, 대본의 마지막 문장(필수 고지 문구 바로 앞)에는 아래 두 가지를
+   자연스럽게 이어서 담으세요 — 광고 카피처럼 따로따로 붙이지 말고 한 호흡의 말하듯이:
    (a) 오늘 내용이 도움이 됐다면 "좋아요"를 눌러달라는 짧은 요청
    (b) 다음 영상에서 다룰 주제를 궁금증을 자극하는 방식으로 예고하며, 놓치지 않으려면
        "구독"해달라는 요청
-   예시: "오늘 내용이 도움 되셨다면 좋아요 하나 남겨주세요. 다음 편에서는 [다음 주제]를
-   다뤄볼게요, 구독하고 기다려주세요." — 이 톤과 순서(좋아요 → 다음 편 예고 → 구독)를
-   따르되, 매번 같은 문장을 반복하지 말고 자연스럽게 변주하세요.
+   (b)에서 궁금증을 만드는 방법은 매번 다르게 쓰세요 — 예: 질문을 던지고 답은 다음 편에서
+   준다고 하기 / "사실 더 의외인 부분이 있다"처럼 반전을 예고하기 / "이것까지 알아야 완전히
+   끝난다"처럼 오늘 내용에 이어지는 필수 정보로 포지셔닝하기. 단순히 다음 주제명만 나열하는
+   식으로 끝내지 마세요.
+
+   아래는 이번 영상에서 참고할 마무리 톤 예시입니다 (그대로 베끼지 말고, 이 예시의 스타일과
+   호흡을 오늘 대본의 결론·다음 주제에 맞게 다시 쓰세요):
+   "__CLOSING_STYLE_EXAMPLE__"
+
    이 예고는 말뿐인 약속이 아닙니다 — 같은 내용을 "next_topic_hint" 필드에 **검색 가능한
    짧은 주제 구문**(예: "카페인 섭취와 혈당의 관계")으로도 반드시 적으세요. 이 값이 실제로
    다음 영상 주제로 쓰입니다.
@@ -122,6 +130,40 @@ class UngroundedStatisticError(Exception):
     실제 사례: "카페인이 인슐린 민감도를 14~37% 낮춘다"처럼, 방향성은 검색 근거와 맞지만
     구체적인 숫자는 모델이 그럴듯하게 지어낸 경우가 있었다 — 검색 근거가 존재하는지만
     확인하는 UnverifiedContentError로는 못 잡는 케이스라 별도로 검사한다."""
+
+
+# 좋아요/구독 유도 멘트를 모델의 "알아서 변주"에만 맡기면 실제로는 톤이 비슷하게 반복된다
+# (실제 시청 피드백으로 확인됨) — 코드에서 서로 다른 톤의 예시를 미리 준비해두고, 영상마다
+# 하나씩 순서대로 골라 프롬프트에 넣어줘서 강제로 다양성을 만든다. {next_topic}은 실제
+# next_topic_hint로 교체해서 모델에게 예시로 보여준다.
+CLOSING_LINE_EXAMPLES = [
+    "오늘 내용이 도움 되셨다면 좋아요 하나 남겨주세요. 다음 편에서는 {next_topic}, 그 답을 들으면 꽤 놀라실 텐데 — 구독하고 기다려주세요.",
+    "여기까지 도움 되셨다면 좋아요 부탁드려요. 그런데 {next_topic}는 어떨까요? 정답은 다음 편에서 공개할게요, 구독해두시면 놓치지 않아요.",
+    "오늘 내용 유익하셨다면 좋아요로 알려주세요. 다음 편은 지금까지와는 조금 다른 이야기, {next_topic}를 다룰 예정이라 더 흥미로우실 거예요 — 구독하고 기다려주세요.",
+    "이런 정보 여기 아니면 어디서 들으시겠어요. 좋아요로 응원해주시고, 다음 편에서는 {next_topic} 얘기도 함께 나눠봐요 — 구독은 필수겠죠.",
+    "오늘 내용 도움 되셨다면 좋아요 하나 부탁드려요. 사실 {next_topic}는 더 의외인 부분이 있는데, 다음 편에서 자세히 풀어드릴게요 — 구독하고 기다려주세요.",
+    "매일 이렇게 쓸모 있는 정보, 구독해두시면 계속 받아보실 수 있어요. 오늘 내용 괜찮으셨다면 좋아요도 부탁드려요. 다음 편 주제는 {next_topic}입니다.",
+    "오늘부터 이거 하나만 지켜보셔도 좋아요, 도움 되셨다면 좋아요 눌러주시고요. 다음 편에서는 {next_topic}까지 알아야 이 얘기가 완성돼요 — 구독하고 기다려주세요.",
+    "이 채널, 매일 밥값 하는 정보만 드리려고 합니다. 오늘도 도움 되셨다면 좋아요 부탁드리고, 다음 편 {next_topic} 얘기도 궁금하시면 구독해두세요.",
+]
+
+_CTA_STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cta_style_state.json")
+
+
+def _next_closing_style_index() -> int:
+    """구독/좋아요 멘트 예시를 매 영상마다 순서대로 하나씩 돌려쓰기 위한 로테이션 인덱스.
+    파일이 없거나 깨져 있으면 0부터 다시 시작한다 — 완벽한 순서 보장보다 "매번 다르게"가
+    목적이라 굳이 예외로 막지 않는다."""
+    index = 0
+    if os.path.exists(_CTA_STATE_PATH):
+        try:
+            with open(_CTA_STATE_PATH, encoding="utf-8") as f:
+                index = json.load(f).get("index", 0)
+        except (json.JSONDecodeError, OSError):
+            index = 0
+    with open(_CTA_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump({"index": (index + 1) % len(CLOSING_LINE_EXAMPLES)}, f)
+    return index % len(CLOSING_LINE_EXAMPLES)
 
 
 _PERCENT_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:%|퍼센트)")
@@ -224,11 +266,18 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
         f"{build_user_prompt(request)}\n\n"
         f"검색으로 확인된 사실:\n{facts_text}"
     )
+
+    closing_topic_placeholder = request.upcoming_topic or "다음 편 주제(직접 정한 next_topic_hint)"
+    closing_style_example = CLOSING_LINE_EXAMPLES[_next_closing_style_index()].format(
+        next_topic=closing_topic_placeholder
+    )
+    system_prompt = SYSTEM_PROMPT.replace("__CLOSING_STYLE_EXAMPLE__", closing_style_example)
+
     response = client.models.generate_content(
         model=MODEL_NAME,
         contents=writing_prompt,
         config=genai_types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system_prompt,
             response_mime_type="application/json",
             response_json_schema=RESPONSE_SCHEMA,
             temperature=0.8,
