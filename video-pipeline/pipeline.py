@@ -76,10 +76,10 @@ def build_pinned_comment(source: str, next_topic_hint: str, article_url: str | N
 KST = timezone(timedelta(hours=9))
 
 
-def next_publish_time_kst(hour: int = 19, minute: int = 0) -> str:
+def next_publish_time_kst(hour: int = 11, minute: int = 30) -> str:
     """오늘(KST) 지정 시각을 유튜브 scheduled_publish_at 형식으로 반환한다.
     my-video-creator/english_words_short.py의 "익일 07:30 예약" 패턴과 동일한 방식 —
-    실행 시각(예: WSL cron이 도는 새벽 5시)과 실제 공개 시각(예: 오후 7시)을 분리해서,
+    실행 시각(예: WSL cron이 도는 새벽 5시)과 실제 공개 시각(예: 오전 11시 30분)을 분리해서,
     노트북이 그 공개 시각에 켜져 있지 않아도 유튜브 서버가 알아서 정시에 공개해준다."""
     now = datetime.now(KST)
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -373,21 +373,21 @@ def run_and_upload(
     cluster: str | None = None,
     voice_id: str = VOICE_PILJAE,
     final_privacy: str = "public",
-    scheduled_publish_at: str | None = "AUTO_7PM",
+    scheduled_publish_at: str | None = "AUTO_1130AM",
 ) -> dict | None:
     """영상 생성부터 업로드·댓글·공개 전환까지 사람 개입 없이 전부 끝낸다.
     WSL cron 등 무인 실행용 — daily_auto_run.py가 이 함수를 호출한다.
 
-    scheduled_publish_at 기본값 "AUTO_7PM"은 실행 시점과 무관하게 항상 그날(KST) 오후 7시에
-    유튜브가 자동으로 공개하도록 예약한다 (실행이 이미 오후 7시를 넘겼으면 다음날 오후 7시).
-    cron이 새벽에 돌고 실제 시청자가 많은 저녁에 공개하고 싶어서 만든 옵션 — None을 넘기면
-    즉시 공개(또는 final_privacy로 지정한 상태)로 바로 올라간다."""
+    scheduled_publish_at 기본값 "AUTO_1130AM"은 실행 시점과 무관하게 항상 그날(KST) 오전
+    11시 30분에 유튜브가 자동으로 공개하도록 예약한다 (실행이 이미 11시 30분을 넘겼으면
+    다음날 같은 시각). cron이 새벽에 돌고 실제 공개는 오전 중으로 하고 싶어서 만든 옵션 —
+    None을 넘기면 즉시 공개(또는 final_privacy로 지정한 상태)로 바로 올라간다."""
     video_path, result, resolved_cluster = _generate_and_compose(topic, cluster, voice_id)
     if not video_path or not result:
         return None
 
-    if scheduled_publish_at == "AUTO_7PM":
-        scheduled_publish_at = next_publish_time_kst(19, 0)
+    if scheduled_publish_at == "AUTO_1130AM":
+        scheduled_publish_at = next_publish_time_kst(11, 30)
 
     # _publish_article()이 같은 slug로 실제 파일을 커밋하는 건 업로드 성공 "이후"지만, slug
     # 자체는 video_path만으로 미리 결정되므로 설명란/댓글에 넣을 URL은 지금 만들어도 된다.
