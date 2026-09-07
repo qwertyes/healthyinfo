@@ -98,15 +98,9 @@ def generate_topics_for_cluster(client: genai.Client, cluster: str, count: int, 
     return data["topics"][:count]
 
 
-def build_calendar(topics_per_cluster: int = 5) -> list[dict]:
+def _round_robin_queue(client: genai.Client, topics_per_cluster: int, avoid: list[str]) -> list[dict]:
     """5개 클러스터 각각에서 topics_per_cluster개씩 뽑아, 라운드로빈으로 섞은 큐를 만든다
     (한 클러스터 주제로 몰리지 않고 골고루 섞여서 나오게)."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise RuntimeError("환경변수 GEMINI_API_KEY가 설정되어 있지 않습니다.")
-    client = genai.Client(api_key=api_key)
-
-    avoid = _existing_topics()
     per_cluster: dict[str, list[str]] = {}
     for cluster in CLUSTERS:
         topics = generate_topics_for_cluster(client, cluster, topics_per_cluster, avoid)
@@ -120,6 +114,47 @@ def build_calendar(topics_per_cluster: int = 5) -> list[dict]:
             if i < len(topics):
                 queue.append({"topic": topics[i], "cluster": cluster})
     return queue
+
+
+def build_calendar(topics_per_cluster: int = 5) -> list[dict]:
+    """큐를 처음부터 새로 만든다 (기존 큐는 무시) — 수동 실행용."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError("환경변수 GEMINI_API_KEY가 설정되어 있지 않습니다.")
+    client = genai.Client(api_key=api_key)
+    return _round_robin_queue(client, topics_per_cluster, _existing_topics())
+
+
+# 하루 2편(daily_auto_run.py의 PUBLISH_SLOTS) 체제에서 큐가 며칠 안에 바닥나는 걸 막기 위해,
+# pop_next()가 큐를 꺼낼 때마다 이 밑으로 남았는지 확인해서 사람 개입 없이 자동으로 보충한다.
+LOW_QUEUE_THRESHOLD = 10
+REFILL_TOPICS_PER_CLUSTER = 4  # 클러스터 5개 x 4 = 20개씩 보충
+
+
+def refill_if_low(
+    queue: list[dict] | None = None,
+    threshold: int = LOW_QUEUE_THRESHOLD,
+    topics_per_cluster: int = REFILL_TOPICS_PER_CLUSTER,
+) -> int:
+    """큐가 threshold개 이하로 남으면 클러스터당 topics_per_cluster개(기본 20개)를 새로
+    브레인스토밍해서 큐 뒤에 이어붙여 저장한다. 반환값: 새로 추가된 주제 개수(0이면 미보충)."""
+    if queue is None:
+        queue = load_calendar()
+    if len(queue) > threshold:
+        return 0
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("⚠️ GEMINI_API_KEY가 없어 콘텐츠 캘린더 큐 자동 보충을 건너뜁니다.")
+        return 0
+    client = genai.Client(api_key=api_key)
+
+    # 이미 만든 영상뿐 아니라 큐에 아직 대기 중인 주제와도 겹치지 않게 한다.
+    avoid = _existing_topics() + [item["topic"] for item in queue]
+    new_items = _round_robin_queue(client, topics_per_cluster, avoid)
+    save_calendar(queue + new_items)
+    print(f"📅 콘텐츠 캘린더 큐가 {threshold}개 이하로 줄어 {len(new_items)}개를 자동으로 더 채웠습니다.")
+    return len(new_items)
 
 
 def load_calendar() -> list[dict]:
@@ -143,6 +178,13 @@ def pop_next() -> tuple[dict | None, dict | None]:
     today = queue.pop(0)
     save_calendar(queue)
     upcoming = queue[0] if queue else None
+
+    try:
+        refill_if_low(queue)
+    except Exception as e:
+        # 큐 보충 실패는 오늘 영상 생성 자체를 막을 이유가 없다 — 로그만 남기고 넘어간다.
+        print(f"⚠️ 콘텐츠 캘린더 큐 자동 보충 중 오류(오늘 영상 생성에는 영향 없음): {e}")
+
     return today, upcoming
 
 
