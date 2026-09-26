@@ -273,7 +273,7 @@ def _generate_and_compose(
         w.text = restore_original_spelling(w.text)
 
     print(f"배경 사진 검색 중... ({result.image_query})")
-    photo_paths = search_photos(result.image_query, photo_prefix, count=3)
+    photo_paths = search_photos(result.image_query, photo_prefix, count=8)  # 90초 안팎이라 3장이면 한 장이 너무 오래 보인다
     if photo_paths:
         print(f"배경 사진 확보: {len(photo_paths)}장")
     else:

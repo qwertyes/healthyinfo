@@ -23,6 +23,9 @@ load_dotenv()
 
 MODEL_NAME = "gemini-3.1-flash-lite"  # my-video-creator와 동일한 저비용 티어
 
+MIN_SCRIPT_CHARS = 650  # 고지·예고 포함 전체 기준. 이보다 짧으면 설명이 부족한 대본이라 다시 쓰게 한다
+MAX_WRITE_ATTEMPTS = 3
+
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -84,7 +87,8 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
    (b)에서 궁금증을 만드는 방법은 매번 다르게 쓰세요 — 예: 질문을 던지고 답은 다음 편에서
    준다고 하기 / "사실 더 의외인 부분이 있다"처럼 반전을 예고하기 / "이것까지 알아야 완전히
    끝난다"처럼 오늘 내용에 이어지는 필수 정보로 포지셔닝하기. 단순히 다음 주제명만 나열하는
-   식으로 끝내지 마세요.
+   식으로 끝내지 마세요. 다음 주제가 긴 질문 문장으로 주어져도 그 문장을 그대로 읽지 말고,
+   말하듯 짧고 자연스러운 구어체로 풀어서 예고하세요.
 
    아래는 이번 영상에서 참고할 마무리 톤 예시입니다 (그대로 베끼지 말고, 이 예시의 스타일과
    호흡을 오늘 대본의 결론·다음 주제에 맞게 다시 쓰세요):
@@ -102,8 +106,18 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
 11. 실제로 검색해서 확인한 출처(기관명 등)를 "source" 필드에 명시하세요.
 
 [형식]
-12. 60~70초 낭독 기준(약 380~470자)의 한국어 대본. 첫 문장은 후킹 문장이어야 합니다. 여러
-   각도의 사실(4번 규칙) + 명확한 한 줄 결론(5-1번 규칙)이 다 들어갈 만큼 내용을 채우세요.
+12. 낭독 기준 85~100초, **전체 700~850자**의 한국어 대본. 좋아요/구독 예고(6번)와 고지 문구
+   (13번)가 약 150자를 차지하므로, 그것을 뺀 **본문은 최소 550자 이상** 채우세요 — 짧게 끝내는
+   것보다 충분히 설명하는 게 우선입니다. 시청자가 "설명이 좀 부족한데 끝났네"라고 느끼면 실패입니다.
+   첫 문장은 후킹 문장이어야 하고, 본문은 다음 흐름을 따르세요:
+   ① 후킹 질문 또는 반전 → ② 핵심 결론을 한 문장으로 먼저 예고 → ③ 근거 3~4개 (각각
+   "무엇이 확인됐는지 → 왜 그런지 원리 → 그래서 시청자의 식탁에서 무슨 뜻인지") → ④ 흔한
+   오해나 예외 조건 → ⑤ 5-1번 규칙의 한 줄 결론.
+12-1. 근거는 "연구에 따르면", "알려져 있습니다"처럼 뭉뚱그리지 말고, 검색으로 확인된 기관·연구의
+   이름, 대상, 조건을 말로 밝히세요 (예: "식품의약품안전처 자료에 따르면", "뉴질랜드 오타고대의
+   2형 당뇨병 환자 대상 연구에서는"). 처음 나오는 전문 용어나 개념은 이름만 던지고 넘어가지 말고
+   반드시 한 문장으로 풀어서 설명하세요. 마지막 근거 뒤에는 결론 전에 "그래서 결국 무슨 뜻인지"를
+   한 번 더 짚어주세요.
 13. 마지막 문장은 항상 다음 고지 문구로 마무리하세요:
    "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
 14. "image_query"에는 영상 배경으로 쓸 스톡 사진을 검색할 **영어** 키워드를 2~4단어로 쓰세요.
@@ -181,7 +195,7 @@ def _find_ungrounded_percentages(script_text: str, facts_text: str) -> list[str]
 @dataclass
 class ScriptRequest:
     topic: str
-    cluster: str  # PLAN.md의 콘텐츠 클러스터: 영양 기초 / 증상별 가이드 / 식단 비교 / 제품 큐레이션 / 루틴·기록
+    cluster: str  # topic_calendar.CLUSTERS의 콘텐츠 클러스터: 한식 밥상 해부 / 편의점·배달 한끼 / 조리·보관의 과학 / 성분표 읽기 / 시즌·상황별 한끼 / 음료·간식
     upcoming_topic: str | None = None  # topic_calendar.py 큐의 다음 항목 — 주어지면 예고 문장이
     # 이 주제를 가리키도록 강제한다 (모델이 next_topic_hint를 즉흥으로 지어내지 않게)
 
@@ -210,7 +224,7 @@ def build_user_prompt(request: ScriptRequest) -> str:
         f"오늘의 주제: {request.topic}\n"
         f"{upcoming_line}\n"
         "아래에 제공되는 '검색으로 확인된 사실'만 근거로 삼아서, '오늘의 건강 상식' 시리즈용 "
-        "60초 숏폼 대본을 시스템 프롬프트 규칙에 맞춰 작성해줘."
+        "90초 안팎(전체 700~850자) 숏폼 대본을 시스템 프롬프트 규칙에 맞춰 충분히 설명하며 작성해줘."
     )
 
 
@@ -273,25 +287,40 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
     )
     system_prompt = SYSTEM_PROMPT.replace("__CLOSING_STYLE_EXAMPLE__", closing_style_example)
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=writing_prompt,
-        config=genai_types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            response_mime_type="application/json",
-            response_json_schema=RESPONSE_SCHEMA,
-            temperature=0.8,
-        ),
-    )
-
-    data = json.loads(response.text)
-
-    ungrounded_percentages = _find_ungrounded_percentages(data["script"], facts_text)
-    if ungrounded_percentages:
-        raise UngroundedStatisticError(
-            f"'{request.topic}' 대본에 검색 근거에 없는 수치가 있습니다: {ungrounded_percentages} — "
-            "방향성은 맞아도 구체적인 숫자를 지어냈을 수 있어 자동으로 차단합니다."
+    # 대본이 길어진 만큼 지어낸 수치가 섞일 확률도 커지므로, 근거 없는 수치가 잡히거나 분량이
+    # 너무 짧으면 바로 포기하지 않고 몇 번 다시 쓰게 한다. 근거 없는 수치가 든 대본은 재시도를
+    # 다 써도 절대 통과시키지 않는다(마지막까지 그러면 예외).
+    data = None
+    last_error: UngroundedStatisticError | None = None
+    for attempt in range(1, MAX_WRITE_ATTEMPTS + 1):
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=writing_prompt,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                response_mime_type="application/json",
+                response_json_schema=RESPONSE_SCHEMA,
+                temperature=0.8,
+            ),
         )
+        candidate = json.loads(response.text)
+
+        ungrounded_percentages = _find_ungrounded_percentages(candidate["script"], facts_text)
+        if ungrounded_percentages:
+            last_error = UngroundedStatisticError(
+                f"'{request.topic}' 대본에 검색 근거에 없는 수치가 있습니다: {ungrounded_percentages} — "
+                "방향성은 맞아도 구체적인 숫자를 지어냈을 수 있어 자동으로 차단합니다."
+            )
+            print(f"⚠️ 근거 없는 수치 {ungrounded_percentages} — 대본 다시 작성 ({attempt}/{MAX_WRITE_ATTEMPTS})")
+            continue
+
+        data = candidate
+        if len(candidate["script"]) >= MIN_SCRIPT_CHARS:
+            break
+        print(f"⚠️ 대본이 짧음({len(candidate['script'])}자 < {MIN_SCRIPT_CHARS}자) — 다시 작성 ({attempt}/{MAX_WRITE_ATTEMPTS})")
+
+    if data is None:
+        raise last_error
 
     return GeneratedScript(
         title=data["title"],

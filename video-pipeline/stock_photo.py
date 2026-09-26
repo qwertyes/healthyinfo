@@ -40,9 +40,12 @@ def search_photos(query: str, out_path_prefix: str, count: int = 3) -> list[str]
 
         paths = []
         for i, photo in enumerate(photos[:count]):
-            image_resp = requests.get(photo["src"]["portrait"], timeout=15)
-            image_resp.raise_for_status()
-            path = f"{out_path_prefix}_{i}.jpg"
+            try:
+                image_resp = requests.get(photo["src"]["portrait"], timeout=15)
+                image_resp.raise_for_status()
+            except requests.RequestException:
+                continue  # 장수가 많아진 만큼, 한 장 실패로 나머지까지 버리지 않는다
+            path = f"{out_path_prefix}_{len(paths)}.jpg"
             os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
             with open(path, "wb") as f:
                 f.write(image_resp.content)
