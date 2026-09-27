@@ -183,6 +183,7 @@ def _save_metadata(path: str, result: GeneratedScript, issues: list[str]) -> Non
                 "image_query": result.image_query,
                 "next_topic_hint": result.next_topic_hint,
                 "grounding_sources": result.grounding_sources,
+                "approx_numbers": result.approx_numbers,
                 "compliance_issues": issues,
             },
             f,

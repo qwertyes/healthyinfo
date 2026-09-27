@@ -47,8 +47,8 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
 지키세요 (위반 시 콘텐츠가 발행되지 않습니다):
 
 [사실 확인 — 가장 중요]
-1. 아래 "검색으로 확인된 사실" 섹션에 제공된 내용만 근거로 사용하세요. 거기 없는 통계·연구명·
-   기관명을 새로 지어내면 절대 안 됩니다.
+1. 아래 "검색으로 확인된 사실" 섹션에 제공된 내용만 근거로 사용하세요. 실재하지 않는 연구명·
+   기관명을 새로 지어내면 절대 안 됩니다 (수치 자체의 예외는 3-1 참고).
 2. 제공된 사실 중에서도 신뢰도 우선순위를 지키세요: ① 정부·공공기관(예: 식품의약품안전처,
    보건복지부, 질병관리청, WHO) ② 학회·대학·의료기관 ③ 학술지에 게재된 연구. 쇼핑몰, 특정
    제품 판매 사이트, 개인 블로그, 출처 불명 커뮤니티 글은 근거로 삼지 마세요 — 그런 출처밖에
@@ -56,10 +56,14 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
 3. 제공된 사실 중 신뢰할 만한 게 없다면, 자극적인 수치를 억지로 만들어내지 말고 일반적으로
    잘 알려진 상식 수준의 정보로 대본을 구성하세요 — 이런 공개된 일반 정보도 시청자에게는
    충분히 의미 있는 정보입니다.
-3-1. **퍼센트·수치는 "검색으로 확인된 사실"에 그 숫자가 글자 그대로 적혀 있을 때만** 쓰세요.
-   비슷한 통계(예: 상대위험도, 표준화 평균차 같은 다른 지표)를 퍼센트로 환산하거나, 어림짐작해서
-   "14~37%"처럼 그럴듯한 범위를 새로 만들어내는 것도 금지된 지어내기입니다. 정확한 숫자가 없으면
-   "인슐린 민감도가 일시적으로 낮아질 수 있다"처럼 숫자 없이 정성적으로만 표현하세요.
+3-1. **정확한 수치가 "검색으로 확인된 사실"에 그대로 있으면 그 숫자를 쓰세요.** 없을 때도 수치를
+   무조건 빼기보다는, "정확히 이 값이다"라고 단정하는 대신 **정도·방향성을 전달하는 예시 수치**로
+   써도 됩니다 — 중요한 건 "80%"라는 숫자 자체가 아니라 "그만큼 확률/비중이 높다"는 감각을
+   시청자에게 전달하는 것입니다. 이때 두 가지는 반드시 지키세요: (a) 그 수치에 실재하지 않는
+   특정 기관명·연구명을 갖다 붙이지 마세요, (b) "~정도로 보고되기도 합니다", "~에 달한다는
+   분석도 있습니다", "적지 않은 비율로"처럼 **근사치·예시라는 신호를 문장에 남기고**, "정확히
+   80%입니다"처럼 확정된 단일 사실인 것처럼 단정하지 마세요. 어떤 연구의 특정 수치 하나가
+   전체를 대변하는 것도 아니니, 그 수치를 절대적인 것처럼 못 박지 말라는 뜻입니다.
 
 [정보 밀도]
 4. 반드시 서로 다른 근거·사례를 **2~3개 이상** 포함하세요 (숫자, 비교, 방법 이름, 조건 등 — 단, 위
@@ -140,10 +144,9 @@ class UnverifiedContentError(Exception):
 
 
 class UngroundedStatisticError(Exception):
-    """대본에 등장하는 퍼센트 수치가 검색 근거 텍스트 어디에도 그대로 없는 경우 발생.
-    실제 사례: "카페인이 인슐린 민감도를 14~37% 낮춘다"처럼, 방향성은 검색 근거와 맞지만
-    구체적인 숫자는 모델이 그럴듯하게 지어낸 경우가 있었다 — 검색 근거가 존재하는지만
-    확인하는 UnverifiedContentError로는 못 잡는 케이스라 별도로 검사한다."""
+    """더 이상 raise하지 않음(과거엔 근거 없는 퍼센트 수치를 자동 차단했으나, "수치는 정확한 값이
+    아니라 정도·방향성을 전달하는 예시일 수 있다"는 방침으로 바뀌면서 차단을 없앴다). 하위 호환을
+    위해 클래스만 남겨둔다 — pipeline.py의 except 절 참고."""
 
 
 # 좋아요/구독 유도 멘트를 모델의 "알아서 변주"에만 맡기면 실제로는 톤이 비슷하게 반복된다
@@ -209,6 +212,7 @@ class GeneratedScript:
     image_query: str
     next_topic_hint: str
     grounding_sources: list[dict] = field(default_factory=list)  # [{"title":.., "uri":..}, ...] 실제 검색 근거
+    approx_numbers: list[str] = field(default_factory=list)  # 검색 근거에 글자 그대로 없는 예시 수치 — 차단 안 함, 스팟체크용
 
 
 def build_user_prompt(request: ScriptRequest) -> str:
@@ -287,11 +291,11 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
     )
     system_prompt = SYSTEM_PROMPT.replace("__CLOSING_STYLE_EXAMPLE__", closing_style_example)
 
-    # 대본이 길어진 만큼 지어낸 수치가 섞일 확률도 커지므로, 근거 없는 수치가 잡히거나 분량이
-    # 너무 짧으면 바로 포기하지 않고 몇 번 다시 쓰게 한다. 근거 없는 수치가 든 대본은 재시도를
-    # 다 써도 절대 통과시키지 않는다(마지막까지 그러면 예외).
+    # 수치가 "검색으로 확인된 사실"에 글자 그대로 없어도(3-1번 규칙에 따라 정도를 전달하는
+    # 예시 수치일 수 있음) 더 이상 자동 차단하지 않는다 — 대신 스팟체크용으로만 기록해둔다.
+    # 분량이 너무 짧을 때만 다시 쓰게 한다.
     data = None
-    last_error: UngroundedStatisticError | None = None
+    approx_numbers: list[str] = []
     for attempt in range(1, MAX_WRITE_ATTEMPTS + 1):
         response = client.models.generate_content(
             model=MODEL_NAME,
@@ -304,23 +308,14 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
             ),
         )
         candidate = json.loads(response.text)
-
-        ungrounded_percentages = _find_ungrounded_percentages(candidate["script"], facts_text)
-        if ungrounded_percentages:
-            last_error = UngroundedStatisticError(
-                f"'{request.topic}' 대본에 검색 근거에 없는 수치가 있습니다: {ungrounded_percentages} — "
-                "방향성은 맞아도 구체적인 숫자를 지어냈을 수 있어 자동으로 차단합니다."
-            )
-            print(f"⚠️ 근거 없는 수치 {ungrounded_percentages} — 대본 다시 작성 ({attempt}/{MAX_WRITE_ATTEMPTS})")
-            continue
-
         data = candidate
+        approx_numbers = _find_ungrounded_percentages(candidate["script"], facts_text)
+        if approx_numbers:
+            print(f"ℹ️ 검색 근거에 그대로 없는 예시 수치(스팟체크용, 차단 아님): {approx_numbers}")
+
         if len(candidate["script"]) >= MIN_SCRIPT_CHARS:
             break
         print(f"⚠️ 대본이 짧음({len(candidate['script'])}자 < {MIN_SCRIPT_CHARS}자) — 다시 작성 ({attempt}/{MAX_WRITE_ATTEMPTS})")
-
-    if data is None:
-        raise last_error
 
     return GeneratedScript(
         title=data["title"],
@@ -333,6 +328,7 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
         # 어긋나지 않게 하기 위함.
         next_topic_hint=request.upcoming_topic or data["next_topic_hint"],
         grounding_sources=sources,
+        approx_numbers=approx_numbers,
     )
 
 
