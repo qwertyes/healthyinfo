@@ -204,7 +204,7 @@ def _find_ungrounded_percentages(script_text: str, facts_text: str) -> list[str]
 @dataclass
 class ScriptRequest:
     topic: str
-    cluster: str  # topic_calendar.CLUSTERS의 콘텐츠 클러스터: 한식 밥상 해부 / 편의점·배달 한끼 / 조리·보관의 과학 / 성분표 읽기 / 시즌·상황별 한끼 / 음료·간식
+    cluster: str  # topic_calendar.CLUSTERS의 콘텐츠 클러스터 — 전체 목록은 topic_calendar.py 참고
     upcoming_topic: str | None = None  # topic_calendar.py 큐의 다음 항목 — 주어지면 예고 문장이
     # 이 주제를 가리키도록 강제한다 (모델이 next_topic_hint를 즉흥으로 지어내지 않게)
 
