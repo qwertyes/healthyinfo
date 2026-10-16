@@ -358,9 +358,21 @@ def _publish_article(
         if commit.returncode != 0 and "nothing to commit" not in commit.stdout:
             print(f"⚠️ 아티클 git commit 실패: {commit.stdout}{commit.stderr}")
             return
-        push = subprocess.run(
-            ["git", "push"], cwd=REPO_ROOT, capture_output=True, text=True, encoding="utf-8"
-        )
+        # 무인 실행 중 git 인증 프롬프트(Credential Manager 등)가 뜨면 영구 대기해서 다음 슬롯이
+        # 통째로 막힌다 — 프롬프트를 끄고 타임아웃을 걸어 멈추는 대신 실패로 끝나게 한다.
+        try:
+            push = subprocess.run(
+                ["git", "-c", "credential.interactive=never", "push"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=120,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"},
+            )
+        except subprocess.TimeoutExpired:
+            print("⚠️ 아티클 git push 시간 초과(120초) — 인증 확인 필요. 다음 슬롯은 계속 진행합니다.")
+            return
         if push.returncode != 0:
             print(f"⚠️ 아티클 git push 실패: {push.stderr}")
         else:
