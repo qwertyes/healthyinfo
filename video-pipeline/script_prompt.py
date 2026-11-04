@@ -12,6 +12,7 @@ my-video-creator/test_gemini_api.py와 동일한 google-genai 클라이언트 �
 
 import json
 import os
+import random
 import re
 from dataclasses import dataclass, field
 
@@ -115,15 +116,15 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
    것보다 충분히 설명하는 게 우선입니다. 시청자가 "설명이 좀 부족한데 끝났네"라고 느끼면 실패입니다.
    첫 문장은 후킹 문장이어야 하고, 본문은 다음 흐름을 따르세요:
    ① 후킹 질문 또는 흔한 믿음 제시 (답은 말하지 않음) → ② 방향만 살짝 보여주는 떡밥 + 끝까지 볼
-   이유 한 문장 (예: "반은 맞고 반은 틀린 얘기예요", "생각과 정반대인데요, 끝에 바로 써먹을
-   방법까지 알려드릴게요") → ③ 근거 3~4개 (각각 "무엇이 확인됐는지 → 왜 그런지 원리 → 그래서
-   시청자의 식탁·일상에서 무슨 뜻인지"), 근거 사이사이에 "그런데 진짜 문제는 따로 있어요",
-   "세 번째가 제일 의외인데요"처럼 다음 내용이 궁금해지는 연결 문장 → ④ **본문의 약 2/3 지점에서
+   이유 한 문장 (이번 영상 참고 톤: "__TEASER_EXAMPLE__") → ③ 근거 3~4개 (각각 "무엇이 확인됐는지
+   → 왜 그런지 원리 → 그래서 시청자의 식탁·일상에서 무슨 뜻인지"), 근거 사이사이에 다음 내용이
+   궁금해지는 연결 문장 (이번 영상 참고 톤: "__BRIDGE_EXAMPLE__") → ④ **본문의 약 2/3 지점에서
    핵심 결론을 처음으로 명확히 공개** → ⑤ 흔한 오해나 예외 조건 + 실천 팁 → ⑥ 5-1번 규칙의 한 줄 결론.
 12-0. **결론을 앞에서 먼저 말하지 마세요.** 시청자가 처음 몇 초 만에 답을 알면 바로 넘겨버립니다.
    "결론부터 말씀드리면", "정답은 ~입니다", "한마디로 ~입니다"처럼 도입부(①~②)에서 답을 공개하는
    표현은 금지입니다. 다만 답을 끝까지 숨겨서 답답하게 만들지도 마세요 — ②에서 방향(맞다/틀리다/
-   의외다)만 암시하고, ④에서 확실히 풀어주는 것이 핵심입니다. 떡밥 문구는 매번 다르게 쓰세요.
+   의외다)만 암시하고, ④에서 확실히 풀어주는 것이 핵심입니다. ②·③의 참고 톤 문장은 **그대로 베끼지
+   말고** 오늘 주제에 맞는 말로 새로 쓰세요.
 12-1. 근거는 "연구에 따르면", "알려져 있습니다"처럼 뭉뚱그리지 말고, 검색으로 확인된 기관·연구의
    이름, 대상, 조건을 말로 밝히세요 (예: "식품의약품안전처 자료에 따르면", "뉴질랜드 오타고대의
    2형 당뇨병 환자 대상 연구에서는"). 처음 나오는 전문 용어나 개념은 이름만 던지고 넘어가지 말고
@@ -181,6 +182,44 @@ CLOSING_LINE_EXAMPLES = [
     "오늘도 도움 되셨다면 좋아요 부탁드려요. 다음 편에서는 {next_topic}, 장 보러 가시기 전에 한 번 보고 가시면 도움이 될 거예요 — 구독해두세요.",
     "오늘 내용 유익하셨다면 좋아요 눌러주시고요. 다음 편에서는 {next_topic}도 함께 짚어드릴 예정이니, 구독해두시고 같이 챙겨보세요.",
 ]
+
+# 떡밥(②)·연결(③) 문장도 예시를 하나만 고정해두면 모델이 글자 그대로 베껴서 영상마다 같은
+# 문장이 반복된다(2026-11-04 "그런데 진짜 문제는 따로 있습니다"가 연속 두 편에 등장) — 영상마다
+# 무작위로 하나씩 골라 참고 톤으로만 보여준다.
+TEASER_EXAMPLES = [
+    "반은 맞고 반은 틀린 얘기인데요, 어디가 틀렸는지 끝까지 보시면 바로 아실 거예요",
+    "많은 분들이 생각하는 것과 꽤 다른 결과가 나왔어요, 하나씩 확인해볼게요",
+    "이게 사실인지 아닌지보다, 왜 그런 말이 나왔는지를 알면 답이 보입니다",
+    "의외로 조건 하나에 따라 답이 완전히 갈리는데요, 그 조건을 마지막에 정리해드릴게요",
+    "저도 처음엔 당연히 맞는 말인 줄 알았는데요, 자료를 찾아보니 이야기가 좀 달랐습니다",
+    "오늘 영상 끝나면 내일부터 바로 바꿔볼 만한 습관이 하나 생기실 거예요",
+    "정답을 바로 말씀드리기 전에, 먼저 우리 몸에서 무슨 일이 일어나는지부터 보시죠",
+    "이 질문, 생각보다 단순하지 않습니다 — 세 가지만 알면 스스로 판단하실 수 있어요",
+]
+
+BRIDGE_EXAMPLES = [
+    "그런데 여기서 끝이 아닙니다",
+    "여기까지는 많이들 아시는 얘기고요, 다음이 진짜 중요합니다",
+    "그럼 반대로 생각해볼까요?",
+    "이 부분에서 대부분 오해가 생깁니다",
+    "그런데 실험 결과를 보면 조금 이상한 점이 있어요",
+    "여기서 한 가지 의문이 생기실 텐데요",
+    "이게 끝이면 간단했을 텐데, 변수가 하나 더 있습니다",
+    "자, 이제 앞에서 말씀드린 조건이 왜 중요한지 나옵니다",
+]
+
+# 도입부(대본 앞 30%)에서 결론을 먼저 말해버리는 표현 — 프롬프트로만 금지하면 flash-lite 모델이
+# 습관적으로 계속 써서(2026-11-04 두 편 모두 "결론부터 말씀드리면") 코드로 검사해 다시 쓰게 한다.
+EARLY_REVEAL_PATTERN = re.compile(
+    r"결론부터|결론을 먼저|결론적으로|답부터|정답부터|정답은|한마디로|단도직입|먼저 답을"
+)
+EARLY_REVEAL_WINDOW = 0.3
+
+
+def _find_early_reveal(script_text: str) -> list[str]:
+    head = script_text[: int(len(script_text) * EARLY_REVEAL_WINDOW)]
+    return EARLY_REVEAL_PATTERN.findall(head)
+
 
 _CTA_STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cta_style_state.json")
 
@@ -307,17 +346,23 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
     closing_style_example = CLOSING_LINE_EXAMPLES[_next_closing_style_index()].format(
         next_topic=closing_topic_placeholder
     )
-    system_prompt = SYSTEM_PROMPT.replace("__CLOSING_STYLE_EXAMPLE__", closing_style_example)
+    system_prompt = (
+        SYSTEM_PROMPT.replace("__CLOSING_STYLE_EXAMPLE__", closing_style_example)
+        .replace("__TEASER_EXAMPLE__", random.choice(TEASER_EXAMPLES))
+        .replace("__BRIDGE_EXAMPLE__", random.choice(BRIDGE_EXAMPLES))
+    )
 
     # 수치가 "검색으로 확인된 사실"에 글자 그대로 없어도(3-1번 규칙에 따라 정도를 전달하는
     # 예시 수치일 수 있음) 더 이상 자동 차단하지 않는다 — 대신 스팟체크용으로만 기록해둔다.
-    # 분량이 너무 짧을 때만 다시 쓰게 한다.
-    data = None
-    approx_numbers: list[str] = []
+    # 분량이 너무 짧거나, 도입부에서 결론을 먼저 말해버리면(12-0번 규칙) 다시 쓰게 한다.
+    # 끝까지 실패해도 파이프라인을 멈추지는 않고, 가장 나은 후보(결론 선공개 없음 > 분량 충족)를 쓴다.
+    best = None
+    best_score = -1
+    retry_note = ""
     for attempt in range(1, MAX_WRITE_ATTEMPTS + 1):
         response = client.models.generate_content(
             model=MODEL_NAME,
-            contents=writing_prompt,
+            contents=writing_prompt + retry_note,
             config=genai_types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 response_mime_type="application/json",
@@ -326,14 +371,31 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
             ),
         )
         candidate = json.loads(response.text)
-        data = candidate
-        approx_numbers = _find_ungrounded_percentages(candidate["script"], facts_text)
-        if approx_numbers:
-            print(f"ℹ️ 검색 근거에 그대로 없는 예시 수치(스팟체크용, 차단 아님): {approx_numbers}")
-
-        if len(candidate["script"]) >= MIN_SCRIPT_CHARS:
+        reveals = _find_early_reveal(candidate["script"])
+        long_enough = len(candidate["script"]) >= MIN_SCRIPT_CHARS
+        score = (0 if reveals else 2) + (1 if long_enough else 0)
+        if score > best_score:
+            best, best_score = candidate, score
+        if score == 3:
             break
-        print(f"⚠️ 대본이 짧음({len(candidate['script'])}자 < {MIN_SCRIPT_CHARS}자) — 다시 작성 ({attempt}/{MAX_WRITE_ATTEMPTS})")
+
+        problems = []
+        if reveals:
+            problems.append(
+                f"도입부에서 결론을 먼저 공개했습니다(사용된 표현: {', '.join(sorted(set(reveals)))}). "
+                "12-0번 규칙대로 앞부분에서는 방향만 암시하고, 핵심 결론은 본문 약 2/3 지점에서 처음 말하세요."
+            )
+        if not long_enough:
+            problems.append(f"대본이 너무 짧습니다({len(candidate['script'])}자 < {MIN_SCRIPT_CHARS}자).")
+        print(f"⚠️ 대본 다시 작성 ({attempt}/{MAX_WRITE_ATTEMPTS}): {' / '.join(problems)}")
+        retry_note = "\n\n[이전 작성본의 문제 — 반드시 고쳐서 다시 쓰세요]\n" + "\n".join(problems)
+
+    data = best
+    approx_numbers = _find_ungrounded_percentages(data["script"], facts_text)
+    if approx_numbers:
+        print(f"ℹ️ 검색 근거에 그대로 없는 예시 수치(스팟체크용, 차단 아님): {approx_numbers}")
+    if _find_early_reveal(data["script"]):
+        print("⚠️ 재작성 후에도 도입부 결론 선공개 표현이 남아 있음 — 그대로 진행")
 
     return GeneratedScript(
         title=data["title"],
