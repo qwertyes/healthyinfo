@@ -20,6 +20,8 @@ import json
 import os
 import sys
 
+import numpy as np
+
 import google.genai as genai
 from dotenv import load_dotenv
 from google.genai import types as genai_types
@@ -114,6 +116,134 @@ def _existing_topics() -> list[str]:
     return list(dict.fromkeys(titles))  # 순서를 유지하면서 중복 제거
 
 
+# ── 중복 주제 검사 ─────────────────────────────────────────────────────────────
+# 프롬프트에 "이미 다룬 주제" 목록을 넘겨도 flash-lite 모델이 표현만 바꾼 같은 주제를 계속 낸다
+# (2026-11-06 자동 보충분 54개 중 22개가 지난 영상과 중복). 그래서 생성 후 코드로 한 번 더 거른다.
+# 임베딩 유사도만으로는 0.85~0.92 구간에서 중복과 단순히 소재만 비슷한 주제가 섞여서(실측),
+# 확실한 구간만 바로 판정하고 애매한 구간은 모델에게 "같은 내용인지" 따로 판정시킨다.
+EMBED_MODEL = "gemini-embedding-001"
+# 판정은 flash-lite로 하면 프롬프트 예시와 똑같은 쌍(감기 찬 바람 vs 젖은 머리)도 놓쳐서 한 단계 위 모델을 쓴다.
+# 클러스터당 1회 호출이라 비용 부담은 작다.
+DUP_JUDGE_MODEL = "gemini-flash-latest"
+DUP_SURE_THRESHOLD = 0.92   # 이 이상이면 판정 없이 중복으로 버림
+DUP_CHECK_THRESHOLD = 0.84  # 이 이상~SURE 미만은 모델 판정, 미만은 새 주제로 통과
+DUP_NEIGHBORS = 5
+
+DUP_JUDGE_SCHEMA = {
+    "type": "object",
+    "properties": {"duplicate_indices": {"type": "array", "items": {"type": "integer"}}},
+    "required": ["duplicate_indices"],
+}
+
+DUP_JUDGE_PROMPT = """유튜브 건강 숏폼 채널의 새 주제 후보가 이미 만든 영상과 사실상 같은 내용인지 판정하세요.
+각 후보 아래에 가장 비슷한 기존 영상 제목들이 있습니다.
+
+중복으로 보는 경우: 시청자가 보고 "이거 전에 본 얘긴데"라고 느낄 만큼 핵심 질문이나 답이 같은 것.
+표현만 바꾼 것, 같은 속설·같은 행동을 다른 각도로 묻는 것도 중복입니다.
+(예: "약은 꼭 식후 30분?" ≈ "식후 30분 꼭 지켜야 할까?", "서방정 쪼개 먹으면 안 되는 이유" ≈ "알약 쪼개 먹어도 될까?",
+"감기는 찬 바람 때문?" ≈ "감기는 젖은 머리 탓?")
+중복이 아닌 경우: 소재(나트륨, 커피, 약 등)만 겹치고 묻는 질문이 다른 것.
+(예: "진통제 자주 먹으면 내성이 생길까?" vs "유통기한 지난 약 먹어도 될까?"는 중복 아님)
+
+같은 음식·약·행동을 다루면서 관심사(나트륨, 당·혈당, 영양소 손실, 복용법 등)까지 같으면 질문 각도가
+조금 달라도 중복입니다. (예: "된장찌개 건더기·국물 나트륨" ≈ "된장찌개 국물 다 마시면 나트륨",
+"만 보 띄엄띄엄 걸어도 될까" ≈ "하루 만 보 꼭 채워야 할까", "식은 밥 데워 먹으면 혈당" ≈ "뜨거운 밥 vs 식힌 밥 혈당")
+버린 후보는 새 주제로 다시 뽑으므로, 확신이 없으면 중복으로 판정하세요.
+
+중복인 후보의 번호만 duplicate_indices에 담으세요."""
+
+
+def _embed(client: genai.Client, texts: list[str]) -> np.ndarray:
+    vectors = []
+    for i in range(0, len(texts), 100):
+        resp = client.models.embed_content(
+            model=EMBED_MODEL,
+            contents=texts[i : i + 100],
+            config=genai_types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY"),
+        )
+        vectors.extend(e.values for e in resp.embeddings)
+    arr = np.array(vectors, dtype=float)
+    return arr / np.linalg.norm(arr, axis=1, keepdims=True)
+
+
+class DuplicateFilter:
+    """기존 영상·대기 큐·이번에 새로 받은 주제와 겹치는 후보를 걸러낸다. 받아들인 주제는 계속 누적해서
+    다른 클러스터의 후보끼리도 겹치지 않게 한다. 임베딩/판정 호출이 실패하면 걸러내지 않고 통과시킨다 —
+    큐 보충 자체가 멈추는 것보다 중복 몇 개가 섞이는 게 낫다."""
+
+    def __init__(self, client: genai.Client, known: list[str]):
+        self.client = client
+        self.known = list(dict.fromkeys(known))
+        self.vectors = _embed(client, self.known) if self.known else np.zeros((0, 1))
+
+    def _judge(self, items: list[tuple[str, list[str]]]) -> set[int]:
+        lines = []
+        for i, (cand, neighbors) in enumerate(items):
+            lines.append(f"[{i}] 후보: {cand}")
+            lines.extend(f"    - 기존: {n}" for n in neighbors)
+        response = self.client.models.generate_content(
+            model=DUP_JUDGE_MODEL,
+            contents="\n".join(lines),
+            config=genai_types.GenerateContentConfig(
+                system_instruction=DUP_JUDGE_PROMPT,
+                response_mime_type="application/json",
+                response_json_schema=DUP_JUDGE_SCHEMA,
+                temperature=0.0,
+            ),
+        )
+        return set(json.loads(response.text)["duplicate_indices"])
+
+    def filter(self, candidates: list[str]) -> tuple[list[str], list[str]]:
+        """반환: (통과한 주제, 중복으로 버린 주제)."""
+        if not candidates:
+            return [], []
+        try:
+            cand_vecs = _embed(self.client, candidates)
+        except Exception as e:
+            print(f"⚠️ 중복 검사 임베딩 실패 — 검사 없이 통과시킵니다: {e}")
+            self.known += candidates
+            return candidates, []
+
+        accepted: list[str] = []
+        accepted_vecs: list[np.ndarray] = []
+        dropped: list[str] = []
+        to_judge: list[tuple[int, list[str]]] = []
+        for i, (cand, vec) in enumerate(zip(candidates, cand_vecs)):
+            pool_texts = self.known + accepted
+            if not pool_texts:
+                accepted.append(cand); accepted_vecs.append(vec); continue
+            pool_vecs = np.vstack([v for v in (self.vectors, *accepted_vecs) if len(v)])
+            sims = pool_vecs @ vec
+            top = np.argsort(-sims)[:DUP_NEIGHBORS]
+            best = float(sims[top[0]])
+            if best >= DUP_SURE_THRESHOLD:
+                dropped.append(cand)
+                print(f"   🔁 중복 제외({best:.2f}): {cand}  ≈  {pool_texts[top[0]]}")
+            elif best >= DUP_CHECK_THRESHOLD:
+                to_judge.append((i, [pool_texts[j] for j in top]))
+            else:
+                accepted.append(cand); accepted_vecs.append(vec)
+
+        if to_judge:
+            try:
+                dup_idx = self._judge([(candidates[i], nb) for i, nb in to_judge])
+            except Exception as e:
+                print(f"⚠️ 중복 판정 호출 실패 — 애매한 후보는 통과시킵니다: {e}")
+                dup_idx = set()
+            for k, (i, neighbors) in enumerate(to_judge):
+                if k in dup_idx:
+                    dropped.append(candidates[i])
+                    print(f"   🔁 중복 제외(판정): {candidates[i]}  ≈  {neighbors[0]}")
+                else:
+                    accepted.append(candidates[i]); accepted_vecs.append(cand_vecs[i])
+
+        if accepted:
+            self.known += accepted
+            new_vecs = np.vstack(accepted_vecs)
+            self.vectors = new_vecs if len(self.vectors) == 0 else np.vstack([self.vectors, new_vecs])
+        return accepted, dropped
+
+
 def generate_topics_for_cluster(client: genai.Client, cluster: str, count: int, avoid: list[str]) -> list[str]:
     avoid_text = "\n".join(f"- {t}" for t in avoid) if avoid else "(없음)"
     prompt = (
@@ -136,14 +266,28 @@ def generate_topics_for_cluster(client: genai.Client, cluster: str, count: int, 
     return data["topics"][:count]
 
 
+MAX_TOPIC_ROUNDS = 3  # 중복으로 버려진 만큼 다시 뽑는 최대 횟수(첫 생성 포함)
+
+
 def _round_robin_queue(client: genai.Client, topics_per_cluster: int, avoid: list[str]) -> list[dict]:
     """클러스터마다 topics_per_cluster개(CLUSTER_WEIGHTS가 있으면 그 배수)씩 뽑아, 한 클러스터
-    주제로 몰리지 않게 비중에 비례해서 고르게 섞은 큐를 만든다."""
+    주제로 몰리지 않게 비중에 비례해서 고르게 섞은 큐를 만든다. 뽑은 주제는 DuplicateFilter로
+    기존 영상·대기 큐와 겹치는지 검사하고, 버려진 만큼 다시 뽑는다(최대 MAX_TOPIC_ROUNDS회)."""
+    dup_filter = DuplicateFilter(client, avoid)
     ordered = []  # (큐 안에서의 상대 위치, 클러스터, 주제)
     for cluster in CLUSTERS:
         count = topics_per_cluster * CLUSTER_WEIGHTS.get(cluster, 1)
-        topics = generate_topics_for_cluster(client, cluster, count, avoid)
-        avoid = avoid + topics  # 다른 클러스터끼리도 겹치지 않게 계속 누적해서 피한다
+        topics: list[str] = []
+        for _ in range(MAX_TOPIC_ROUNDS):
+            need = count - len(topics)
+            if need <= 0:
+                break
+            candidates = generate_topics_for_cluster(client, cluster, need, avoid)
+            accepted, dropped = dup_filter.filter(candidates)
+            topics += accepted
+            avoid = avoid + candidates  # 버린 후보도 다시 내지 않게 피할 목록에 넣는다
+        if len(topics) < count:
+            print(f"   ⚠️ [{cluster}] 중복을 빼고 나니 {len(topics)}/{count}개만 확보")
         for j, topic in enumerate(topics):
             ordered.append(((j + 0.5) / len(topics), cluster, topic))
 
