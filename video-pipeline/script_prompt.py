@@ -272,7 +272,21 @@ class GeneratedScript:
     approx_numbers: list[str] = field(default_factory=list)  # 검색 근거에 글자 그대로 없는 예시 수치 — 차단 안 함, 스팟체크용
 
 
+# 클러스터 성격상 일반 규칙만으로는 위험하거나 구조가 흐트러지는 경우에만 추가 지시를 붙인다.
+CLUSTER_SCRIPT_NOTES = {
+    "몸이 보내는 신호": (
+        "이 클러스터는 '몸에 이런 현상이 있으면 무엇을 의심해볼까'를 다룹니다. 진단처럼 들리지 않게 "
+        "다음 순서를 지키세요: 흔하고 대부분 걱정 없는 원인(생활 습관·일시적 원인)을 먼저 설명 → "
+        "'이런 신호가 함께 있거나 오래가면' 병원에서 확인해볼 필요가 있는 경우를 구체적인 조건(기간, "
+        "동반 증상 등)으로 구분 → 일상에서 해볼 수 있는 확인·관리법. '이 증상이면 OO병입니다'처럼 단정하거나 "
+        "암·중증 질환으로 겁주지 말고, 질병명은 '~와 관련이 있을 수 있어 확인이 필요하다' 정도로만 언급하세요."
+    ),
+}
+
+
 def build_user_prompt(request: ScriptRequest) -> str:
+    cluster_note = CLUSTER_SCRIPT_NOTES.get(request.cluster, "")
+    cluster_line = f"\n{cluster_note}\n" if cluster_note else ""
     upcoming_line = ""
     if request.upcoming_topic:
         upcoming_line = (
@@ -283,6 +297,7 @@ def build_user_prompt(request: ScriptRequest) -> str:
     return (
         f"콘텐츠 클러스터: {request.cluster}\n"
         f"오늘의 주제: {request.topic}\n"
+        f"{cluster_line}"
         f"{upcoming_line}\n"
         "아래에 제공되는 '검색으로 확인된 사실'만 근거로 삼아서, '오늘의 건강 상식' 시리즈용 "
         "90초 안팎(전체 700~850자) 숏폼 대본을 시스템 프롬프트 규칙에 맞춰 충분히 설명하며 작성해줘."
