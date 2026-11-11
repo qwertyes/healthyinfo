@@ -68,9 +68,23 @@ SOFTEN_REPLACEMENTS = [
 ]
 
 
+# "고혈압을 예방합니다"를 그냥 치환하면 "고혈압을 예방에 도움이…"처럼 조사가 어긋나서, 목적격 조사가 붙은
+# 경우는 조사를 떼고 "고혈압 예방에 도움이…"로 먼저 바꾼다.
+_OBJECT_VERB = re.compile(r"(\S+?)(?:을|를)\s*(치료|예방)(합니다|한다)")
+_OBJECT_VERB_DST = {"치료": "관리에 도움이 될 수 있", "예방": "예방에 도움이 될 수 있"}
+
+
 def soften_expressions(text: str) -> tuple[str, list[str]]:
     """단정적인 의료 표현을 권장 표현으로 바꾼다. 반환: (바뀐 텍스트, 바뀐 내역)."""
     changes = []
+
+    def _obj(m: re.Match) -> str:
+        ending = "습니다" if m.group(3) == "합니다" else "다"
+        new = f"{m.group(1)} {_OBJECT_VERB_DST[m.group(2)]}{ending}"
+        changes.append(f"{m.group(0)} → {new}")
+        return new
+
+    text = _OBJECT_VERB.sub(_obj, text)
     for src, dst in SOFTEN_REPLACEMENTS:
         if src in text:
             text = text.replace(src, dst)
