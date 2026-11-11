@@ -54,11 +54,9 @@ BANNED_PATTERNS = [
     "질병을 예방합니다",
 ]
 
-# "낫다"는 "병이 낫습니다"(치료)와 "찬물보다 낫습니다"(더 좋다)가 같은 글자라, 단순 포함 검사로는
-# 대본 프롬프트가 결론 형식으로 권하는 "A보다 B가 낫다" 문장까지 차단된다. 그래서 바로 앞이
-# 비교 표현("~보다", "~는 게/편이/것이")인 경우만 허용하고 나머지는 계속 금지한다.
-_HEAL_PATTERN = re.compile(r"낫(?:습니다|는다)")
-_COMPARATIVE_BEFORE = re.compile(r"(?:보다|(?:^|\s)(?:게|편이|것이))\s+(?:\S+\s+){0,3}$")
+# "낫습니다/낫는다"는 예전엔 치료 효과 표현으로 보고 차단했으나 금지 목록에서 뺐다(2026-11-11).
+# 다음 편 예고에서 주제 제목("빨리 낫는다는 말, 사실일까?")을 읽었다는 이유만으로 영상 한 편이
+# 통째로 차단돼서, 사용자가 "그 정도 표현은 있어도 된다"고 결정함.
 
 REQUIRED_DISCLAIMER = "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
 SITE_URL = "https://hankki-nine.vercel.app"
@@ -172,11 +170,6 @@ def compliance_check(script_text: str) -> list[str]:
     for pattern in BANNED_PATTERNS:
         if pattern in body_text:
             issues.append(f"금지 표현 포함: '{pattern}'")
-    for m in _HEAL_PATTERN.finditer(body_text):
-        before = body_text[max(0, m.start() - 20):m.start()]
-        if not _COMPARATIVE_BEFORE.search(before):
-            issues.append(f"금지 표현 포함: '{m.group()}' (비교 표현이 아닌 '낫다')")
-            break
     if REQUIRED_DISCLAIMER not in script_text:
         issues.append("필수 고지 문구가 없음")
     return issues
