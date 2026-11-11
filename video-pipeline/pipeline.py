@@ -52,6 +52,30 @@ from pronunciation import apply_pronunciation_fixes, restore_original_spelling
 # 예고에 들어갔다는 이유만으로 영상 한 편이 통째로 차단된 일 이후, 사용자가 "금지 목록 자체가 필요 없다"고
 # 결정함 — 음식이 질병 관리에 도움이 된다는 내용도 영상으로 만들어야 한다는 취지. 되살리기 전에 사용자에게
 # 먼저 확인할 것. 남은 자동 점검은 필수 고지 문구 하나뿐이다(빠지면 자동으로 붙인다).
+#
+# 대신 "문제 될 만한 표현은 권장 표현으로 바꾸자"는 사용자 의견에 따라, 대본 프롬프트(8번 규칙)로 권장 표현을
+# 쓰게 하고, 그래도 남은 단정 표현 중 문법이 깨지지 않게 1:1로 바꿀 수 있는 것만 여기서 자동 치환한다.
+# 차단은 하지 않는다.
+SOFTEN_REPLACEMENTS = [
+    ("완치됩니다", "크게 좋아질 수 있습니다"),
+    ("완치된다", "크게 좋아질 수 있다"),
+    ("치료됩니다", "좋아질 수 있습니다"),
+    ("치료된다", "좋아질 수 있다"),
+    ("치료합니다", "관리에 도움이 될 수 있습니다"),
+    ("치료한다", "관리에 도움이 될 수 있다"),
+    ("예방합니다", "예방에 도움이 될 수 있습니다"),
+    ("예방한다", "예방에 도움이 될 수 있다"),
+]
+
+
+def soften_expressions(text: str) -> tuple[str, list[str]]:
+    """단정적인 의료 표현을 권장 표현으로 바꾼다. 반환: (바뀐 텍스트, 바뀐 내역)."""
+    changes = []
+    for src, dst in SOFTEN_REPLACEMENTS:
+        if src in text:
+            text = text.replace(src, dst)
+            changes.append(f"{src} → {dst}")
+    return text, changes
 
 REQUIRED_DISCLAIMER = "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
 SITE_URL = "https://hankki-nine.vercel.app"
@@ -234,6 +258,11 @@ def _generate_and_compose(
     except (UnverifiedContentError, UngroundedStatisticError) as e:
         print(f"⛔ 자동 차단: {e}")
         return None, None, None
+
+    result.script, script_changes = soften_expressions(result.script)
+    result.title, title_changes = soften_expressions(result.title)
+    if script_changes or title_changes:
+        print(f"✏️ 단정 표현을 권장 표현으로 바꿈: {', '.join(script_changes + title_changes)}")
 
     issues = compliance_check(result.script)
 
