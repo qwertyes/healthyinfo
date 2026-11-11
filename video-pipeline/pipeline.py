@@ -38,6 +38,7 @@ ARTICLES_DIR = os.path.join(REPO_ROOT, "web", "content", "articles")
 import topic_calendar
 from compose_video import compose_short
 from script_prompt import (
+    DISCLAIMER_VARIANTS,
     GeneratedScript,
     ScriptRequest,
     UngroundedStatisticError,
@@ -91,7 +92,8 @@ def soften_expressions(text: str) -> tuple[str, list[str]]:
             changes.append(f"{src} → {dst}")
     return text, changes
 
-REQUIRED_DISCLAIMER = "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
+# 고정 댓글 등 대본 밖에서 쓰는 기본 문구. 대본 안의 고지 문구는 script_prompt.DISCLAIMER_VARIANTS 중 하나를 무작위로 쓴다.
+REQUIRED_DISCLAIMER = DISCLAIMER_VARIANTS[0]
 SITE_URL = "https://hankki-nine.vercel.app"
 
 
@@ -198,7 +200,7 @@ def upload_and_comment(
 def compliance_check(script_text: str) -> list[str]:
     """필수 고지 문구 점검. 위반 목록을 반환 (빈 리스트면 통과)."""
     issues = []
-    if REQUIRED_DISCLAIMER not in script_text:
+    if not any(v in script_text for v in DISCLAIMER_VARIANTS):
         issues.append("필수 고지 문구가 없음")
     return issues
 
@@ -283,7 +285,7 @@ def _generate_and_compose(
     # 필수 고지 문구 누락은 "잘못된 정보"가 아니라 정형화된 법적 boilerplate가 빠진 것뿐이라,
     # 영상을 통째로 버리는 대신 자동으로 붙이고 재검사한다 (다른 위반은 그대로 차단).
     if issues == ["필수 고지 문구가 없음"]:
-        result.script = result.script.rstrip() + " " + REQUIRED_DISCLAIMER
+        result.script = result.script.rstrip() + " " + result.disclaimer
         issues = compliance_check(result.script)
 
     date_tag = datetime.now().strftime("%Y%m%d_%H%M%S")

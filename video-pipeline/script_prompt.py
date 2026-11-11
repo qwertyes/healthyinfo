@@ -140,8 +140,8 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
    행동 지침을 드러내는 제목은 금지입니다. 대신 질문형("~해도 될까?", "~가 진짜일까?")이나 궁금증을
    남기는 형태("~의 의외의 진실", "~ 전에 꼭 확인할 것", "다들 거꾸로 알고 있는 ~")로 쓰고, 답이
    맞다/틀리다 어느 쪽인지 제목에서 드러나지 않게 하세요. 40자 이내.
-13. 마지막 문장은 항상 다음 고지 문구로 마무리하세요:
-   "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
+13. 마지막 문장은 항상 다음 고지 문구로, 글자 하나 바꾸지 말고 그대로 마무리하세요:
+   "__DISCLAIMER__"
 14. "image_query"에는 영상 배경으로 쓸 스톡 사진을 검색할 **영어** 키워드를 2~4단어로 쓰세요.
    구체적이고 눈에 보이는 대상을 묘사하세요 (예: "grilled chicken breast", "person drinking water",
    "fresh vegetables market"). 추상적인 개념어(예: "health", "nutrition")만 쓰지 마세요.
@@ -186,6 +186,19 @@ CLOSING_LINE_EXAMPLES = [
     "이 정보가 괜찮으셨다면 좋아요로 알려주세요. 다음 편 주제는 {next_topic}이에요. 구독해두시면 다음 편 올라올 때 바로 알려드릴게요.",
     "오늘도 도움 되셨다면 좋아요 부탁드려요. 다음 편에서는 {next_topic}, 장 보러 가시기 전에 한 번 보고 가시면 도움이 될 거예요 — 구독해두세요.",
     "오늘 내용 유익하셨다면 좋아요 눌러주시고요. 다음 편에서는 {next_topic}도 함께 짚어드릴 예정이니, 구독해두시고 같이 챙겨보세요.",
+]
+
+# 마지막 고지 문구가 매번 똑같아서 영상마다 같은 문장으로 끝나는 게 지루하다는 피드백(2026-11-11)으로,
+# 뜻은 같고 표현만 다른 문구 중 하나를 무작위로 골라 쓴다. pipeline.py는 이 중 하나라도 들어 있으면 통과로 본다.
+DISCLAIMER_VARIANTS = [
+    "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다.",
+    "오늘 내용은 일반적인 건강 정보로, 개인의 진단이나 치료를 대신할 수는 없습니다.",
+    "이 영상은 일반적인 건강 상식을 담고 있으며, 전문의의 진단과 치료를 대신하지 않습니다.",
+    "몸 상태는 사람마다 다르니, 오늘 정보는 참고로만 보시고 진단과 치료는 전문가와 상의하세요.",
+    "오늘 정보는 일반적인 참고용이며, 의학적 진단이나 치료를 대체하지 않습니다.",
+    "이 내용은 일반적인 건강 정보일 뿐, 개인별 진단과 치료를 대신하지는 않습니다.",
+    "증상이 계속된다면 이 정보만 믿기보다 병원에서 꼭 진료를 받아보세요. 오늘 내용은 일반적인 건강 정보입니다.",
+    "이 정보는 건강 관리를 위한 일반 상식이며, 의사의 진단과 치료를 대신할 수 없습니다.",
 ]
 
 # 떡밥(②)·연결(③) 문장도 예시를 하나만 고정해두면 모델이 글자 그대로 베껴서 영상마다 같은
@@ -275,6 +288,7 @@ class GeneratedScript:
     next_topic_hint: str
     grounding_sources: list[dict] = field(default_factory=list)  # [{"title":.., "uri":..}, ...] 실제 검색 근거
     approx_numbers: list[str] = field(default_factory=list)  # 검색 근거에 글자 그대로 없는 예시 수치 — 차단 안 함, 스팟체크용
+    disclaimer: str = DISCLAIMER_VARIANTS[0]  # 이번 대본에 쓰라고 지시한 고지 문구 (빠졌을 때 pipeline.py가 이걸 붙인다)
 
 
 # 클러스터 성격상 일반 규칙만으로는 위험하거나 구조가 흐트러지는 경우에만 추가 지시를 붙인다.
@@ -366,10 +380,12 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
     closing_style_example = CLOSING_LINE_EXAMPLES[_next_closing_style_index()].format(
         next_topic=closing_topic_placeholder
     )
+    disclaimer = random.choice(DISCLAIMER_VARIANTS)
     system_prompt = (
         SYSTEM_PROMPT.replace("__CLOSING_STYLE_EXAMPLE__", closing_style_example)
         .replace("__TEASER_EXAMPLE__", random.choice(TEASER_EXAMPLES))
         .replace("__BRIDGE_EXAMPLE__", random.choice(BRIDGE_EXAMPLES))
+        .replace("__DISCLAIMER__", disclaimer)
     )
 
     # 수치가 "검색으로 확인된 사실"에 글자 그대로 없어도(3-1번 규칙에 따라 정도를 전달하는
@@ -429,6 +445,7 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
         next_topic_hint=request.upcoming_topic or data["next_topic_hint"],
         grounding_sources=sources,
         approx_numbers=approx_numbers,
+        disclaimer=disclaimer,
     )
 
 
