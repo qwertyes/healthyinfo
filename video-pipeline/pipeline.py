@@ -6,8 +6,8 @@
 최소한의 안전장치로 삼는다:
   1. script_prompt.generate_script()가 실제 검색 근거 없이 만들어진 대본을 자동으로 차단한다
      (UnverifiedContentError).
-  2. 이 파일의 compliance_check()가 금지 표현/필수 고지 문구를 스캔해서, 위반 시 영상을
-     만들지 않고 건너뛴다.
+  2. 이 파일의 compliance_check()가 필수 고지 문구를 확인한다 (빠지면 자동으로 붙인다).
+     금지 표현 목록은 2026-11-11에 사용자 결정으로 없앴다.
 둘 다 통과한 것만 영상으로 만들어진다. 그래도 100% 정확성을 보장하지는 않으므로, 여유가
 생기면 output/ 폴더의 metadata.json으로 가끔 스팟체크하는 걸 권장한다.
 
@@ -48,15 +48,10 @@ from stock_photo import search_photos
 from typecast_tts import VOICE_PILJAE, generate_narration_with_words
 from pronunciation import apply_pronunciation_fixes, restore_original_spelling
 
-# COMPLIANCE_COPY_GUIDE.md의 금지 표현 목록 — 자동 점검용 (사람 검수 없이 이게 최종 게이트)
-BANNED_PATTERNS = [
-    "치료합니다", "치료됩니다", "완치", "처방", "주치의", "AI 의사", "AI 주치의",
-    "질병을 예방합니다",
-]
-
-# "낫습니다/낫는다"는 예전엔 치료 효과 표현으로 보고 차단했으나 금지 목록에서 뺐다(2026-11-11).
-# 다음 편 예고에서 주제 제목("빨리 낫는다는 말, 사실일까?")을 읽었다는 이유만으로 영상 한 편이
-# 통째로 차단돼서, 사용자가 "그 정도 표현은 있어도 된다"고 결정함.
+# 금지 표현 목록(치료합니다·완치·처방·주치의·낫는다 등)은 2026-11-11에 전부 없앴다. "낫는다"가 다음 편
+# 예고에 들어갔다는 이유만으로 영상 한 편이 통째로 차단된 일 이후, 사용자가 "금지 목록 자체가 필요 없다"고
+# 결정함 — 음식이 질병 관리에 도움이 된다는 내용도 영상으로 만들어야 한다는 취지. 되살리기 전에 사용자에게
+# 먼저 확인할 것. 남은 자동 점검은 필수 고지 문구 하나뿐이다(빠지면 자동으로 붙인다).
 
 REQUIRED_DISCLAIMER = "이 정보는 일반적인 영양 정보이며, 의학적 진단·치료·처방을 대체하지 않습니다."
 SITE_URL = "https://hankki-nine.vercel.app"
@@ -163,13 +158,8 @@ def upload_and_comment(
 
 
 def compliance_check(script_text: str) -> list[str]:
-    """금지 표현 자동 점검. 위반 목록을 반환 (빈 리스트면 통과)."""
+    """필수 고지 문구 점검. 위반 목록을 반환 (빈 리스트면 통과)."""
     issues = []
-    # 필수 고지 문구 자체에 "처방" 등이 포함되어 있어, 점검 대상에서는 제외하고 검사한다.
-    body_text = script_text.replace(REQUIRED_DISCLAIMER, "")
-    for pattern in BANNED_PATTERNS:
-        if pattern in body_text:
-            issues.append(f"금지 표현 포함: '{pattern}'")
     if REQUIRED_DISCLAIMER not in script_text:
         issues.append("필수 고지 문구가 없음")
     return issues
