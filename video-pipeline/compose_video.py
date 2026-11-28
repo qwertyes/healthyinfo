@@ -17,6 +17,7 @@ ImageMagick 의존성을 피하려고 MoviePy TextClip 대신 PIL로 텍스트�
 만들어서 우회한다.
 """
 
+import bisect
 import os
 
 import numpy as np
@@ -162,16 +163,21 @@ def _prepare_zoom_source(photo_path: str, zoom_amount: float) -> np.ndarray:
     return np.array(_load_cover_image(photo_path, oversized_w, oversized_h))
 
 
-def make_photo_background_clip(photo_paths: list[str], duration: float) -> VideoClip:
+def make_photo_background_clip(
+    photo_paths: list[str], duration: float, segment_starts: list[float] | None = None
+) -> VideoClip:
     """
-    스톡 사진 여러 장을 구간별로 전환하며, 각 구간마다 느린 줌인(켄 번즈)을 준다.
+    스톡 사진 여러 장을 구간별로 전환하며 (segment_starts가 있으면 사진 i는 segment_starts[i]초부터
+    — 내레이션이 그 장면을 말하기 시작하는 시점, 없으면 균등 분할), 각 구간마다 느린 줌인(켄 번즈)을 준다.
     위에 어둡게 오버레이해서 자막 가독성을 확보한다.
     MoviePy 내장 .resize()가 최신 Pillow에서 깨지는 문제(Image.ANTIALIAS 제거)를 피하려고
     프레임을 직접 numpy/PIL로 생성한다.
     """
     zoom_amount = 0.08
     n = len(photo_paths)
-    segment_duration = duration / n
+    if not segment_starts or len(segment_starts) != n:
+        segment_starts = [duration * i / n for i in range(n)]
+    bounds = list(segment_starts) + [duration]
     sources = [_prepare_zoom_source(p, zoom_amount) for p in photo_paths]
 
     overlay = _build_dark_overlay().astype(np.float64)
@@ -179,8 +185,9 @@ def make_photo_background_clip(photo_paths: list[str], duration: float) -> Video
     overlay_alpha = overlay[:, :, 3:4] / 255.0
 
     def make_frame(t: float) -> np.ndarray:
-        idx = min(n - 1, int(t // segment_duration))
-        local_t = t - idx * segment_duration
+        idx = max(0, min(n - 1, bisect.bisect_right(segment_starts, t) - 1))
+        segment_duration = max(1e-6, bounds[idx + 1] - bounds[idx])
+        local_t = t - bounds[idx]
         progress = min(1.0, local_t / segment_duration) if segment_duration > 0 else 1.0
 
         src = sources[idx]
@@ -425,6 +432,7 @@ def compose_short(
     out_path: str,
     brand_label: str = "한끼정답",
     background_photo_paths: list[str] | None = None,
+    background_segment_starts: list[float] | None = None,
 ) -> str:
     narration = AudioFileClip(audio_path)
     # Typecast 원본 음성이 일반적인 쇼츠 설명 음성보다 작다는 피드백 → 정규화 후 최대 근처로 키운다.
@@ -432,7 +440,7 @@ def compose_short(
     duration = narration.duration
 
     if background_photo_paths:
-        background = make_photo_background_clip(background_photo_paths, duration)
+        background = make_photo_background_clip(background_photo_paths, duration, background_segment_starts)
     else:
         background = make_gradient_background_clip(duration)
     layers = [background]

@@ -45,7 +45,7 @@ from script_prompt import (
     UnverifiedContentError,
     generate_script,
 )
-from stock_photo import search_photos
+from stock_photo import search_photos, search_scene_photos
 from typecast_tts import VOICE_PILJAE, generate_narration_with_words
 from pronunciation import apply_pronunciation_fixes, restore_original_spelling
 
@@ -197,6 +197,83 @@ def upload_and_comment(
     return {"success": True, "video_id": video_id, "comment_id": comment_id}
 
 
+MIN_SCENE_SECONDS = 2.5  # 이보다 짧게 스쳐 지나가는 장면은 앞 장면에 합친다
+MIN_SCENES = 3  # 장면 정보가 이보다 적으면 예전 방식(대표 검색어 8장 균등 분할)으로 대체
+
+
+def _compact(text: str) -> str:
+    """공백·문장부호를 빼서, 대본 문구와 TTS 단어 타이밍의 사소한 표기 차이를 무시하고 비교한다."""
+    return re.sub(r"[\s\.,!?~·…'\"“”‘’()\-—:;]", "", text)
+
+
+def scene_start_times(scenes: list[dict], words, duration: float) -> list[float | None]:
+    """장면 anchor(대본에서 복사한 문구)가 내레이션에서 실제로 시작되는 시각을 단어 타이밍으로 찾는다.
+    못 찾은 장면은 None (호출 쪽에서 앞뒤 장면 사이로 보간)."""
+    joined = ""
+    owner: list[int] = []  # joined의 글자 → 단어 번호
+    for wi, w in enumerate(words):
+        piece = _compact(w.text)
+        joined += piece
+        owner += [wi] * len(piece)
+
+    starts: list[float | None] = []
+    search_from = 0
+    for sc in scenes:
+        anchor = _compact(sc.get("anchor", ""))
+        pos = -1
+        for cand in (anchor, anchor[:8], anchor[:5]):
+            if len(cand) >= 4:
+                pos = joined.find(cand, search_from)
+                if pos >= 0:
+                    break
+        if pos >= 0 and owner:
+            starts.append(words[owner[pos]].start)
+            search_from = pos + 1
+        else:
+            starts.append(None)
+    if starts:
+        starts[0] = 0.0
+    # 못 찾은 장면은 앞뒤로 찾은 장면 시각 사이에 고르게 배치한다
+    known = [(i, t) for i, t in enumerate(starts) if t is not None] + [(len(starts), duration)]
+    for (i0, t0), (i1, t1) in zip(known, known[1:]):
+        for k in range(i0 + 1, i1):
+            starts[k] = t0 + (t1 - t0) * (k - i0) / (i1 - i0)
+    return starts
+
+
+def fetch_scene_backgrounds(result: GeneratedScript, words, duration: float, photo_prefix: str):
+    """장면별 배경 사진과 각 사진이 나타날 시각을 구한다. 반환: (사진 경로들, 시작 시각들 또는 None)."""
+    scenes = result.scenes
+    if len(scenes) >= MIN_SCENES:
+        print(f"배경 사진 검색 중... (장면 {len(scenes)}개)")
+        for sc in scenes:
+            print(f"   · {sc['anchor']} → {sc['query']}")
+        starts = scene_start_times(scenes, words, duration)
+        paths = search_scene_photos([sc["query"] for sc in scenes], photo_prefix, general_query=result.image_query)
+        kept_paths, kept_starts = [], []
+        for path, start in zip(paths, starts):
+            if not path:
+                continue  # 사진을 못 찾은 장면은 앞 장면 사진이 이어서 나온다
+            if kept_starts and start - kept_starts[-1] < MIN_SCENE_SECONDS:
+                continue
+            if start >= duration - 1.0:
+                continue
+            kept_paths.append(path)
+            kept_starts.append(start)
+        if len(kept_paths) >= MIN_SCENES:
+            kept_starts[0] = 0.0
+            # 웹 아티클 썸네일이 {date_tag}_bg_0.jpg를 쓰므로 첫 장면 사진이 그 이름이어야 한다
+            first = f"{photo_prefix}_0.jpg"
+            if kept_paths[0] != first:
+                os.replace(kept_paths[0], first)
+                kept_paths[0] = first
+            return kept_paths, kept_starts
+        print("장면별 사진이 부족해서 대표 검색어 방식으로 대체합니다.")
+
+    print(f"배경 사진 검색 중... ({result.image_query})")
+    return search_photos(result.image_query, photo_prefix, count=8), None
+
+
 def compliance_check(script_text: str) -> list[str]:
     """필수 고지 문구 점검. 위반 목록을 반환 (빈 리스트면 통과)."""
     issues = []
@@ -216,6 +293,7 @@ def _save_metadata(path: str, result: GeneratedScript, issues: list[str]) -> Non
                 "source": result.source,
                 "tags": result.tags,
                 "image_query": result.image_query,
+                "scenes": result.scenes,
                 "next_topic_hint": result.next_topic_hint,
                 "grounding_sources": result.grounding_sources,
                 "approx_numbers": result.approx_numbers,
@@ -313,15 +391,21 @@ def _generate_and_compose(
     for w in words:
         w.text = restore_original_spelling(w.text)
 
-    print(f"배경 사진 검색 중... ({result.image_query})")
-    photo_paths = search_photos(result.image_query, photo_prefix, count=8)  # 90초 안팎이라 3장이면 한 장이 너무 오래 보인다
+    photo_paths, photo_starts = fetch_scene_backgrounds(result, words, duration, photo_prefix)
     if photo_paths:
         print(f"배경 사진 확보: {len(photo_paths)}장")
     else:
         print("배경 사진을 못 찾아서 그라데이션 배경으로 대체합니다.")
 
     print("영상 합성 중 (카라오케 자막)...")
-    compose_short(result.title, words, audio_path, video_path, background_photo_paths=photo_paths or None)
+    compose_short(
+        result.title,
+        words,
+        audio_path,
+        video_path,
+        background_photo_paths=photo_paths or None,
+        background_segment_starts=photo_starts,
+    )
 
     print(f"\n✅ 완료: {video_path}")
     print(f"메타데이터(스팟체크용): {metadata_path}")

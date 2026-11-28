@@ -35,9 +35,17 @@ RESPONSE_SCHEMA = {
         "source": {"type": "string"},
         "tags": {"type": "array", "items": {"type": "string"}},
         "image_query": {"type": "string"},
+        "scenes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"anchor": {"type": "string"}, "query": {"type": "string"}},
+                "required": ["anchor", "query"],
+            },
+        },
         "next_topic_hint": {"type": "string"},
     },
-    "required": ["title", "script", "source", "tags", "image_query", "next_topic_hint"],
+    "required": ["title", "script", "source", "tags", "image_query", "scenes", "next_topic_hint"],
 }
 
 SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏폼 대본 작가입니다.
@@ -84,6 +92,12 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
    낫다", "~하면 ~하다"처럼 조건과 결론이 짝지어진 문장으로 마무리하세요. 예: "커피는 공복보다
    식사 후 30분 뒤에 마시는 게 혈당 스파이크를 줄이는 데 유리합니다." 이 결론 문장 다음에
    바로 아래 6번 규칙의 다음 영상 예고가 이어집니다.
+5-2. **음식·식사가 나오는 주제라면, ⑤ 실천 팁에 "몸에 좋은 한 끼 조합" 예시를 하나 꼭 넣으세요.**
+   채널 이름이 '한끼정답'인 만큼, 시청자가 "그럼 뭘 같이 먹으면 되지?"에 대한 답을 들고 가야 합니다.
+   추상적인 "채소를 곁들이세요" 말고 구체적인 음식 이름으로 짝을 지어 주세요 (예: "라면에는 달걀과
+   대파를 넣고, 김치 대신 오이무침을 곁들이면 단백질은 채우고 나트륨 부담은 덜 수 있어요",
+   "고등어구이 한 상이라면 시금치나물과 두부된장국을 붙여 보세요"). 왜 그 조합이 좋은지 한 마디 이유도
+   붙이세요. 약·수면·생활 습관처럼 음식과 상관없는 주제라면 억지로 넣지 마세요.
 6. 위 한 줄 결론 다음, 대본의 마지막 문장(필수 고지 문구 바로 앞)에는 아래 두 가지를
    자연스럽게 이어서 담으세요 — 광고 카피처럼 따로따로 붙이지 말고 한 호흡의 말하듯이:
    (a) 오늘 내용이 도움이 됐다면 "좋아요"를 눌러달라는 짧은 요청
@@ -142,9 +156,20 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
    맞다/틀리다 어느 쪽인지 제목에서 드러나지 않게 하세요. 40자 이내.
 13. 마지막 문장은 항상 다음 고지 문구로, 글자 하나 바꾸지 말고 그대로 마무리하세요:
    "__DISCLAIMER__"
-14. "image_query"에는 영상 배경으로 쓸 스톡 사진을 검색할 **영어** 키워드를 2~4단어로 쓰세요.
-   구체적이고 눈에 보이는 대상을 묘사하세요 (예: "grilled chicken breast", "person drinking water",
-   "fresh vegetables market"). 추상적인 개념어(예: "health", "nutrition")만 쓰지 마세요.
+14. "image_query"에는 영상 전체를 대표하는 배경 사진 검색용 **영어** 키워드를 2~4단어로 쓰세요
+   (장면별 사진을 못 찾았을 때의 대체용). 구체적이고 눈에 보이는 대상을 묘사하세요 (예: "grilled
+   chicken breast", "person drinking water"). 추상적인 개념어(예: "health", "nutrition")만 쓰지 마세요.
+14-1. "scenes"에는 대본을 처음부터 끝까지 **6~8개 장면**으로 나눠, 장면마다 배경 사진을 정하세요.
+   배경 사진은 그 순간 내레이션이 말하고 있는 대상과 맞아야 합니다.
+   - "anchor": 그 장면이 시작되는 지점의 대본 문구를 **대본에서 글자 그대로 복사한 8~15자**.
+     첫 장면의 anchor는 대본의 첫 부분이어야 하고, 장면은 대본 순서대로 나열하세요.
+   - "query": 그 장면에서 말하는 내용을 **사진으로 찍을 수 있는 구체적인 대상**으로 바꾼 영어
+     검색어 2~4단어. 말하는 음식이 나오면 그 음식 자체를(한식이면 "korean"을 붙여서, 예: "korean
+     soybean paste stew", "korean spinach side dish"), 사람의 행동이면 그 행동을(예: "woman rubbing
+     calf muscle", "man sleeping on pillow"), 몸 부위면 그 부위를 묘사하세요. "study", "research",
+     "health", "risk", "nutrient"처럼 사진으로 찍을 수 없는 개념어는 금지입니다 — 연구·기관을
+     말하는 장면이라면 그 연구가 다루는 음식이나 행동을 찍으세요. 장면끼리 query가 겹치지 않게 하세요.
+   - 마지막 고지·예고 구간은 첫 장면과 비슷한 대표 이미지(예: 차려진 한 상)로 하세요.
 
 출력은 반드시 아래 JSON 스키마를 따르세요:
 {
@@ -153,6 +178,7 @@ SYSTEM_PROMPT = """당신은 한끼정답 유튜브 채널의 건강정보 숏�
   "source": "실제 검색으로 확인한 출처 (기관/연구명). 일반 상식 수준이라 특정 출처가 없으면 빈 문자열",
   "tags": ["영상 태그", "..."],
   "image_query": "배경 사진 검색용 영어 키워드",
+  "scenes": [{"anchor": "대본에서 그대로 복사한 장면 시작 문구", "query": "그 장면 배경 사진 영어 검색어"}, "... 6~8개"],
   "next_topic_hint": "대본 마지막 예고와 일치하는, 다음 영상 검색용 짧은 주제 구문"
 }"""
 
@@ -286,6 +312,7 @@ class GeneratedScript:
     tags: list[str]
     image_query: str
     next_topic_hint: str
+    scenes: list[dict] = field(default_factory=list)  # [{"anchor": 대본 속 장면 시작 문구, "query": 영어 사진 검색어}]
     grounding_sources: list[dict] = field(default_factory=list)  # [{"title":.., "uri":..}, ...] 실제 검색 근거
     approx_numbers: list[str] = field(default_factory=list)  # 검색 근거에 글자 그대로 없는 예시 수치 — 차단 안 함, 스팟체크용
     disclaimer: str = DISCLAIMER_VARIANTS[0]  # 이번 대본에 쓰라고 지시한 고지 문구 (빠졌을 때 pipeline.py가 이걸 붙인다)
@@ -293,6 +320,13 @@ class GeneratedScript:
 
 # 클러스터 성격상 일반 규칙만으로는 위험하거나 구조가 흐트러지는 경우에만 추가 지시를 붙인다.
 CLUSTER_SCRIPT_NOTES = {
+    "한끼 조합 정답": (
+        "이 클러스터는 채널 이름(한끼정답)처럼 '이렇게 차려 먹으면 좋다'는 한 끼 조합의 정답을 주는 영상입니다. "
+        "메인 음식의 영양상 아쉬운 점(부족한 영양소·과한 성분)을 먼저 짚고, 그것을 채워주거나 줄여주는 반찬·곁들임을 "
+        "구체적인 음식 이름으로 2~3개 제안하세요 (예: '삼겹살엔 상추·깻잎 쌈과 마늘, 그리고 된장 대신 생채소 듬뿍'). "
+        "각 조합마다 '왜 이 조합이 좋은지'를 근거와 함께 설명하고, 마지막 실천 팁에서는 시청자가 오늘 저녁 바로 "
+        "따라 차릴 수 있는 한 상 구성(밥·국·메인·반찬)을 한 문장으로 정리해 주세요."
+    ),
     "몸이 보내는 신호": (
         "이 클러스터는 '몸에 이런 현상이 있으면 무엇을 의심해볼까'를 다룹니다. 진단처럼 들리지 않게 "
         "다음 순서를 지키세요: 흔하고 대부분 걱정 없는 원인(생활 습관·일시적 원인)을 먼저 설명 → "
@@ -439,6 +473,7 @@ def generate_script(request: ScriptRequest) -> GeneratedScript:
         source=data["source"],
         tags=data["tags"],
         image_query=data["image_query"],
+        scenes=[sc for sc in data.get("scenes", []) if sc.get("anchor") and sc.get("query")],
         # 다음 주제가 이미 캘린더로 정해져 있으면 모델이 자유롭게 지어낸 값 대신 그 값을 그대로
         # 신뢰한다 — 모델이 프롬프트 지시를 놓쳐서 다른 주제를 예고해도 실제 다음 영상과
         # 어긋나지 않게 하기 위함.
@@ -457,6 +492,8 @@ if __name__ == "__main__":
     print(f"출처(자체 기재): {result.source}")
     print(f"태그: {result.tags}")
     print(f"이미지 검색어: {result.image_query}")
+    for sc in result.scenes:
+        print(f"  장면: {sc['anchor']} → {sc['query']}")
     print(f"다음 영상 예고 주제: {result.next_topic_hint}")
     print("검색 그라운딩 근거:")
     for s in result.grounding_sources:
